@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import shutil
 from importlib import import_module
 from pathlib import Path
 
@@ -195,6 +196,62 @@ async def test_control_server_publishes_tui_changes(tmp_path: Path) -> None:
         assert len(notes_message["params"]["revision"]) == 64
         writer.close()
         await writer.wait_closed()
+    finally:
+        await server.close()
+
+
+@pytest.mark.asyncio
+async def test_stock_emacs_opens_live_org_session(tmp_path: Path) -> None:
+    emacs = shutil.which("emacs")
+    if emacs is None:
+        pytest.skip("Emacs is not installed")
+    control = import_module("groket.integrations.control")
+    session_dir = tmp_path / "session-emacs-live"
+    _write_session(session_dir)
+    opened: list[tuple[Path, int | None]] = []
+
+    async def open_session(path: Path, prompt_index: int | None) -> bool:
+        opened.append((path, prompt_index))
+        return True
+
+    server = control.ControlServer(
+        socket_path=tmp_path / "emacs-live.sock",
+        open_session=open_session,
+    )
+    await server.start()
+    package_dir = Path(__file__).parents[2] / "groket" / "integrations" / "emacs"
+    expression = f"""
+(progn
+  (setq groket-control-socket {json.dumps(str(server.socket_path))})
+  (require 'groket)
+  (let ((buffer (groket-open-session {json.dumps(str(session_dir))} 6)))
+    (with-current-buffer buffer
+      (princ (format "%s|%s|%s"
+                     groket-session-id
+                     groket-notes-revision
+                     (derived-mode-p 'groket-session-mode))))))
+"""
+    try:
+        process = await asyncio.create_subprocess_exec(
+            emacs,
+            "--batch",
+            "--quick",
+            "--eval",
+            "(setq load-prefer-newer t)",
+            "-L",
+            str(package_dir),
+            "--eval",
+            expression,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=15)
+        assert process.returncode == 0, stderr.decode("utf-8", errors="replace")
+        session_id, revision, mode = stdout.decode().strip().split("|")
+        assert session_id == session_dir.name
+        assert len(revision) == 64
+        assert mode == "groket-session-mode"
+        assert opened == [(session_dir, 6)]
     finally:
         await server.close()
 
