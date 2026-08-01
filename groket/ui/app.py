@@ -36,6 +36,7 @@ from textual.widgets import (
 from ..analysis import AnalysisResult, AnalysisService, get_analysis_service, set_analysis_service
 from ..analysis.base import Finding
 from ..constants import META_CACHE_FILENAME
+from ..integrations.control import ControlServer
 from ..models import JsonObject, JsonValue, SessionMeta
 from ..parser import extract_prompt, find_sessions, list_turn_outcome_for_dir, load_session_meta
 from ..paths import app_config_path
@@ -404,7 +405,7 @@ class TraceEvalApp(App):
         self._control_socket = (
             Path(control_socket).expanduser() if control_socket is not None else None
         )
-        self._control_server = None
+        self._control_server: ControlServer | None = None
         self._initial_session = (
             Path(initial_session).expanduser().resolve() if initial_session is not None else None
         )
@@ -680,8 +681,6 @@ class TraceEvalApp(App):
     def _start_control_service(self) -> None:
         if self._control_socket is None:
             return
-        from ..integrations.control import ControlServer
-
         self._control_server = ControlServer(
             socket_path=self._control_socket,
             resolve_session=self._resolve_control_session,
