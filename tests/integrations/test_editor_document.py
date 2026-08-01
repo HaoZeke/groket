@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import json
+from importlib import import_module
 from pathlib import Path
 
-from groket.integrations.editor import render_editor_document
 from groket.notes import NoteEntry, NotesDoc, save_notes
+
+
+def _render_editor_document(session_dir: Path):
+    module = import_module("groket.integrations.editor")
+    return module.render_editor_document(session_dir)
 
 
 def _write_session(session_dir: Path) -> None:
@@ -91,7 +96,7 @@ def test_render_editor_document_uses_prompt_indexes_and_note_properties(tmp_path
         NotesDoc(session_id=session_dir.name, notes=[note]),
     )
 
-    document = render_editor_document(session_dir)
+    document = _render_editor_document(session_dir)
 
     assert document.session_id == session_dir.name
     assert document.prompt_indexes == (4, 9)
@@ -128,7 +133,7 @@ def test_render_editor_document_uses_turn_index_when_prompt_metadata_is_absent(
         encoding="utf-8",
     )
 
-    document = render_editor_document(session_dir)
+    document = _render_editor_document(session_dir)
 
     assert document.prompt_indexes == (0,)
     assert "* Prompt 0" in document.text
