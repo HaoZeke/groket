@@ -138,8 +138,10 @@ async def test_tui_owns_control_socket_and_opens_catalog_session(tmp_path: Path)
         assert saved["result"]["notes"][0]["id"] == "n-live-editor"
         await _wait_until(
             pilot,
-            lambda: isinstance(app.screen, BrowserScreen)
-            and any(note.id == "n-live-editor" for note in app.screen._notes_doc.notes),
+            lambda: (
+                isinstance(app.screen, BrowserScreen)
+                and any(note.id == "n-live-editor" for note in app.screen._notes_doc.notes)
+            ),
             description="BrowserScreen note refresh",
         )
 
