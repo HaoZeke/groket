@@ -353,6 +353,8 @@ class TraceEvalApp(App):
         *,
         config_path: Path | None = None,
         control_socket: Path | None = None,
+        initial_session: Path | None = None,
+        initial_prompt_index: int | None = None,
         **kwargs,
     ) -> None:
         setup_i18n()
@@ -395,6 +397,12 @@ class TraceEvalApp(App):
             Path(control_socket).expanduser() if control_socket is not None else None
         )
         self._control_server = None
+        self._initial_session = (
+            Path(initial_session).expanduser().resolve()
+            if initial_session is not None
+            else None
+        )
+        self._initial_prompt_index = initial_prompt_index
         self._analysis_jobs_active: int = 0
         self._self_test_summary: str = ""
         self._meta_only: list[tuple[SessionMeta, str]] = []
@@ -626,6 +634,12 @@ class TraceEvalApp(App):
         table.focus()
         self._schedule_live_sessions_poll()
         self._start_control_service()
+        if self._initial_session is not None:
+            self.call_after_refresh(
+                self.open_session_path,
+                self._initial_session,
+                prompt_index=self._initial_prompt_index,
+            )
 
     def _resolve_control_session(self, reference: str) -> Path | None:
         """Resolve a path or catalog session id without a broad filesystem scan."""

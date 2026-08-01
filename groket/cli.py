@@ -80,17 +80,44 @@ TOOL_COMMANDS = frozenset({"gen", "generator", "self-test", "batch", "rules"})
 COMMAND_ALIASES = {"generator": "gen"}
 
 
-def launch_tui(path: Path | None, config: Path | None) -> None:
+def launch_tui(
+    path: Path | None,
+    config: Path | None,
+    *,
+    control_socket: Path | bool | None = None,
+    prompt_index: int | None = None,
+) -> None:
     """Start the TUI for *path* (work root, traces dir, or session) or the default work root."""
+    from .integrations.control import default_socket_path
     from .paths import resolve_work_and_traces
     from .ui.app import TraceEvalApp
 
     cfg = config.expanduser() if config is not None else None
     wd, tr = resolve_work_and_traces(path)
+    session: Path | None = None
+    if path is not None:
+        candidate = Path(path).expanduser()
+        markers = ("updates.jsonl", "events.jsonl", "chat_history.jsonl", "summary.json")
+        if candidate.is_dir() and any((candidate / marker).is_file() for marker in markers):
+            session = candidate.resolve()
+    socket_path = (
+        None
+        if control_socket is False
+        else Path(control_socket).expanduser()
+        if isinstance(control_socket, Path)
+        else default_socket_path()
+    )
     typer.echo(f"groket: work_dir={wd}", err=True)
     typer.echo(f"  traces: {tr}", err=True)
     typer.echo(f"  runner writes: {wd / 'runs' / 'traces'}", err=True)
-    TraceEvalApp(traces_path=tr, work_dir=wd, config_path=cfg).run()
+    TraceEvalApp(
+        traces_path=tr,
+        work_dir=wd,
+        config_path=cfg,
+        control_socket=socket_path,
+        initial_session=session,
+        initial_prompt_index=prompt_index,
+    ).run()
 
 
 @app.callback(invoke_without_command=True)
@@ -117,11 +144,39 @@ def main_callback(
             show_default=False,
         ),
     ] = None,
+    control_socket: Annotated[
+        Path | None,
+        typer.Option(
+            "--control-socket",
+            help="Unix socket used by local editor integrations.",
+            show_default=False,
+        ),
+    ] = None,
+    control: Annotated[
+        bool,
+        typer.Option(
+            "--control/--no-control",
+            help="Enable the local editor control socket.",
+        ),
+    ] = True,
+    prompt_index: Annotated[
+        int | None,
+        typer.Option(
+            "--prompt-index",
+            help="Prompt index selected when PATH is a session directory.",
+            show_default=False,
+        ),
+    ] = None,
 ) -> None:
     """Start the TUI when no subcommand is given."""
     if ctx.invoked_subcommand is not None:
         return
-    launch_tui(path=path, config=config)
+    launch_tui(
+        path=path,
+        config=config,
+        control_socket=control_socket if control else False,
+        prompt_index=prompt_index,
+    )
 
 
 @batch_app.command("run")
