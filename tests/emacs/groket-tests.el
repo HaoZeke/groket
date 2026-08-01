@@ -97,13 +97,13 @@ Original detail
       (cl-letf (((symbol-function 'groket-connect) (lambda () 'connection))
                 ((symbol-function 'groket-refresh) #'ignore)
                 ((symbol-function 'jsonrpc-request)
-                 (lambda (_connection method _params &rest _keys)
+                 (lambda (_connection method params &rest _keys)
                    (pcase method
                      ("notes/list"
                       '(:schema (:fields [(:id "summary") (:id "detail")])
                         :revision "rev-1"))
                      ("notes/upsert"
-                      (setq saved-note (plist-get _params :note))
+                      (setq saved-note (plist-get params :note))
                       '(:revision "rev-2"))))))
         (groket-new-note))
       (should (= (plist-get saved-note :turnIndex) 0))
