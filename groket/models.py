@@ -318,7 +318,6 @@ class ToolCall:
     result_content: str = ""
     is_error: bool = False
     update_index: int = 0
-    prompt_index: int | None = None
     exit_code: int | None = None
     signal: str | None = None
 
@@ -365,6 +364,7 @@ class TraceEvent:
     raw_input: ToolInput = field(default_factory=ToolInputBag)
     is_error: bool = False
     update_index: int = 0
+    prompt_index: int | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.raw_input, ToolInputBag):
