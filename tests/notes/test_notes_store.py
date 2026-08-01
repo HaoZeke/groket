@@ -5,10 +5,8 @@ from __future__ import annotations
 from hashlib import sha256
 from pathlib import Path
 
-import pytest
-
 import groket.notes as notes_mod
-
+import pytest
 from groket.notes import (
     NOTES_FILENAME,
     NoteEntry,
