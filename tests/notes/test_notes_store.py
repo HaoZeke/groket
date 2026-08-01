@@ -7,19 +7,17 @@ from pathlib import Path
 
 import pytest
 
+import groket.notes as notes_mod
+
 from groket.notes import (
     NOTES_FILENAME,
     NoteEntry,
-    NotesConflict,
     NotesDoc,
     collect_notes_for_export,
-    delete_note,
     load_notes,
     notes_mtime,
-    notes_snapshot,
     parse_toml,
     save_notes,
-    upsert_note,
 )
 
 
@@ -36,7 +34,7 @@ def test_empty_notes_snapshot_has_stable_content_revision(tmp_path: Path) -> Non
     sd = tmp_path / "sess"
     sd.mkdir()
 
-    snapshot = notes_snapshot(sd)
+    snapshot = notes_mod.notes_snapshot(sd)
 
     assert snapshot.doc.session_id == "sess"
     assert snapshot.doc.notes == []
@@ -46,40 +44,40 @@ def test_empty_notes_snapshot_has_stable_content_revision(tmp_path: Path) -> Non
 def test_upsert_note_changes_revision_and_persists_entry(tmp_path: Path) -> None:
     sd = tmp_path / "sess"
     sd.mkdir()
-    before = notes_snapshot(sd)
+    before = notes_mod.notes_snapshot(sd)
     entry = NoteEntry.new(
         turn_index=3,
         fields={"summary": "inspect this turn"},
         note_id="n-editor",
     )
 
-    after = upsert_note(sd, entry, expected_revision=before.revision)
+    after = notes_mod.upsert_note(sd, entry, expected_revision=before.revision)
 
     assert after.revision != before.revision
     assert after.doc.notes == [entry]
-    assert notes_snapshot(sd).revision == after.revision
+    assert notes_mod.notes_snapshot(sd).revision == after.revision
     assert load_notes(sd).notes[0].fields["summary"] == "inspect this turn"
 
 
 def test_stale_upsert_rejects_without_overwriting_notes(tmp_path: Path) -> None:
     sd = tmp_path / "sess"
     sd.mkdir()
-    empty = notes_snapshot(sd)
-    first = upsert_note(
+    empty = notes_mod.notes_snapshot(sd)
+    first = notes_mod.upsert_note(
         sd,
         NoteEntry.new(turn_index=1, fields={"summary": "first"}, note_id="n-one"),
         expected_revision=empty.revision,
     )
 
-    with pytest.raises(NotesConflict) as caught:
-        upsert_note(
+    with pytest.raises(notes_mod.NotesConflict) as caught:
+        notes_mod.upsert_note(
             sd,
             NoteEntry.new(turn_index=1, fields={"summary": "stale"}, note_id="n-one"),
             expected_revision=empty.revision,
         )
 
     assert caught.value.current_revision == first.revision
-    stored = notes_snapshot(sd)
+    stored = notes_mod.notes_snapshot(sd)
     assert stored.revision == first.revision
     assert stored.doc.notes[0].fields["summary"] == "first"
 
@@ -87,14 +85,14 @@ def test_stale_upsert_rejects_without_overwriting_notes(tmp_path: Path) -> None:
 def test_delete_note_requires_current_revision(tmp_path: Path) -> None:
     sd = tmp_path / "sess"
     sd.mkdir()
-    empty = notes_snapshot(sd)
-    saved = upsert_note(
+    empty = notes_mod.notes_snapshot(sd)
+    saved = notes_mod.upsert_note(
         sd,
         NoteEntry.new(turn_index=2, fields={"summary": "remove"}, note_id="n-remove"),
         expected_revision=empty.revision,
     )
 
-    deleted = delete_note(sd, "n-remove", expected_revision=saved.revision)
+    deleted = notes_mod.delete_note(sd, "n-remove", expected_revision=saved.revision)
 
     assert deleted.doc.notes == []
     assert deleted.revision != saved.revision
@@ -103,9 +101,9 @@ def test_delete_note_requires_current_revision(tmp_path: Path) -> None:
 def test_delete_missing_note_keeps_revision(tmp_path: Path) -> None:
     sd = tmp_path / "sess"
     sd.mkdir()
-    before = notes_snapshot(sd)
+    before = notes_mod.notes_snapshot(sd)
 
-    after = delete_note(sd, "n-missing", expected_revision=before.revision)
+    after = notes_mod.delete_note(sd, "n-missing", expected_revision=before.revision)
 
     assert after.revision == before.revision
 
