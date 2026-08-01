@@ -346,6 +346,14 @@ class TraceEvalApp(App):
             self.prompt_index = prompt_index
             self.result = result
 
+    class _ControlNotesChanged(Message):
+        """Canonical note change marshalled onto the Textual message loop."""
+
+        def __init__(self, session_dir: Path, result: asyncio.Future[None]) -> None:
+            super().__init__()
+            self.session_dir = session_dir
+            self.result = result
+
     def __init__(
         self,
         traces_path: Path | None = None,
@@ -663,6 +671,12 @@ class TraceEvalApp(App):
         self.post_message(self._ControlOpenSession(session_dir, prompt_index, result))
         return await result
 
+    async def _control_notes_changed(self, session_dir: Path) -> None:
+        """Refresh an open browser after a socket-originated note mutation."""
+        result = asyncio.get_running_loop().create_future()
+        self.post_message(self._ControlNotesChanged(session_dir, result))
+        await result
+
     def _start_control_service(self) -> None:
         if self._control_socket is None:
             return
@@ -672,6 +686,7 @@ class TraceEvalApp(App):
             socket_path=self._control_socket,
             resolve_session=self._resolve_control_session,
             open_session=self._control_open_session,
+            notes_changed=self._control_notes_changed,
         )
         self.run_worker(
             self._control_server.serve_forever(),
@@ -697,6 +712,28 @@ class TraceEvalApp(App):
             event.result.set_exception(exc)
         else:
             event.result.set_result(True)
+
+    def on_trace_eval_app__control_notes_changed(
+        self,
+        event: _ControlNotesChanged,
+    ) -> None:
+        """Reload notes when the active browser displays the changed session."""
+        if event.result.done():
+            return
+        try:
+            screen = self.screen
+            if isinstance(screen, BrowserScreen):
+                try:
+                    same_session = screen.session_dir.resolve() == event.session_dir.resolve()
+                except OSError:
+                    same_session = screen.session_dir == event.session_dir
+                if same_session:
+                    screen._load_notes()
+                    screen._update_reports_tab()
+        except Exception as exc:
+            event.result.set_exception(exc)
+        else:
+            event.result.set_result(None)
 
     def _run_control_broadcast(self, coroutine) -> None:
         """Run a control notification under Textual worker ownership."""

@@ -33,6 +33,7 @@ CAPABILITIES = (
 
 type SessionResolver = Callable[[str], Path | None]
 type OpenSession = Callable[[Path, int | None], Awaitable[bool]]
+type NotesChanged = Callable[[Path], Awaitable[None]]
 
 
 @dataclass(frozen=True)
@@ -120,10 +121,12 @@ class ControlServer:
         socket_path: Path | None = None,
         resolve_session: SessionResolver | None = None,
         open_session: OpenSession | None = None,
+        notes_changed: NotesChanged | None = None,
     ) -> None:
         self.socket_path = Path(socket_path or default_socket_path()).expanduser()
         self._resolve_session = resolve_session or _default_resolve_session
         self._open_session = open_session
+        self._notes_changed = notes_changed
         self._server: asyncio.AbstractServer | None = None
         self._writers: set[asyncio.StreamWriter] = set()
         self._writer_framing: dict[asyncio.StreamWriter, str] = {}
@@ -329,6 +332,8 @@ class ControlServer:
                 expected_revision=json_as_str(params.get("expectedRevision")),
             )
             result = _snapshot_mapping(snapshot)
+            if self._notes_changed is not None:
+                await self._notes_changed(session)
             await self.notify(
                 "notes/changed",
                 {"sessionId": session.name, "revision": snapshot.revision},
@@ -346,6 +351,8 @@ class ControlServer:
                 expected_revision=json_as_str(params.get("expectedRevision")),
             )
             result = _snapshot_mapping(snapshot)
+            if self._notes_changed is not None:
+                await self._notes_changed(session)
             await self.notify(
                 "notes/changed",
                 {"sessionId": session.name, "revision": snapshot.revision},
