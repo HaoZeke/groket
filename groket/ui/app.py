@@ -949,7 +949,7 @@ class TraceEvalApp(App):
             :func:`~groket.analysis.inflight.try_begin_session_analysis` and will
             :func:`~groket.analysis.inflight.end_session_analysis` in its ``finally``.
         :param force: When True, re-run even when cache is warm (and run deferred
-            LLM plugins). Default False avoids multi-minute LLM on bulk refresh.
+            plugins). Default False avoids slow deferred work on bulk refresh.
         """
         from ..analysis.inflight import (
             analysis_session_key,
@@ -1053,7 +1053,7 @@ class TraceEvalApp(App):
             try:
                 for idx, (meta, label) in enumerate(pending):
                     try:
-                        # Explicit Analyze action: force so deferred LLM runs.
+                        # Explicit Analyze action includes deferred plugins.
                         self._analyze_one(meta, label, hold_inflight=True, force=True)
                     finally:
                         end_session_analysis(meta.session_dir)
@@ -2205,29 +2205,46 @@ class TraceEvalApp(App):
         row_key = str(event.row_key.value)
         self._open_session(row_key)
 
-    def open_session_path(self, session_dir: Path | str, *, live: bool | None = None) -> None:
+    def open_session_path(
+        self,
+        session_dir: Path | str,
+        *,
+        live: bool | None = None,
+        prompt_index: int | None = None,
+    ) -> None:
         """Open a session path in the trace browser (main list, Jobs modal, etc.)."""
-        self._open_session(str(session_dir), live=live)
+        self._open_session(str(session_dir), live=live, prompt_index=prompt_index)
 
-    def _open_session(self, row_key: str, live: bool | None = None) -> None:
+    def _open_session(
+        self,
+        row_key: str,
+        live: bool | None = None,
+        prompt_index: int | None = None,
+    ) -> None:
         """Open a session in the browser immediately.
 
         Analysis runs inside BrowserScreen._load_data on its own worker
         so the screen appears without delay.
         """
         plugin_results = self._plugin_results.get(row_key)
-        self._push_browser(Path(row_key), plugin_results)
+        self._push_browser(Path(row_key), plugin_results, prompt_index=prompt_index)
 
     def _push_runner_with_prefill(self, prefill: RunnerPrefill) -> None:
         """Construct and push RunnerScreen on the main thread."""
         self.push_screen(RunnerScreen(self.work_dir, run_manager=self.run_manager, prefill=prefill))
 
     def _push_browser(
-        self, session_path: Path, plugin_results: dict[str, AnalysisResult] | None
+        self,
+        session_path: Path,
+        plugin_results: dict[str, AnalysisResult] | None,
+        *,
+        prompt_index: int | None = None,
     ) -> None:
         """Construct and push BrowserScreen on the main thread."""
         self._pause_home_traces_watch(pause=True)
-        self.push_screen(BrowserScreen(session_path, plugin_results))
+        self.push_screen(
+            BrowserScreen(session_path, plugin_results, prompt_index=prompt_index)
+        )
 
     def action_open_runner(self) -> None:
         self.push_screen(RunnerScreen(self.work_dir, run_manager=self.run_manager))

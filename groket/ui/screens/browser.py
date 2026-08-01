@@ -98,7 +98,12 @@ class BrowserScreen(TabPaneNavigation, ChromeActions):
         self.activate_tab_pane("tab-reports")
 
     def __init__(
-        self, session_dir: Path, plugin_results: dict[str, AnalysisResult] | None = None, **kwargs
+        self,
+        session_dir: Path,
+        plugin_results: dict[str, AnalysisResult] | None = None,
+        *,
+        prompt_index: int | None = None,
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         self.session_dir = session_dir
@@ -121,6 +126,7 @@ class BrowserScreen(TabPaneNavigation, ChromeActions):
         self._diff_meta: dict = {}
         self._timeline_filter: str = "all"
         self._timeline_search: str = ""
+        self._requested_prompt_index = prompt_index
         self._report_section_keys: set[str] = set()
         self._report_filter: str = "all"
         self._report_select_options_key: tuple[str, ...] = ()
@@ -1258,7 +1264,7 @@ class BrowserScreen(TabPaneNavigation, ChromeActions):
     def _auto_needs_background_job(self) -> bool:
         """True when auto-open should enqueue *non-deferred* analyzers only.
 
-        Deferred (LLM) plugins are never started from open — they are
+        Deferred plugins are never started from open — they are
         cache-only until the operator force-analyzes.
         """
         try:
@@ -1282,7 +1288,7 @@ class BrowserScreen(TabPaneNavigation, ChromeActions):
         """Queue analysis on the serial analysis pool (UI thread).
 
         Non-force (open / auto): paint disk cache immediately (including stale
-        deferred LLM results), show the stale banner when versions diverge, and
+        deferred results), show the stale banner when versions diverge, and
         **do not** re-run multi-minute deferred plugins unless cache is missing.
         Force (palette Analyze): always re-run on the background pool.
         """
@@ -1300,7 +1306,7 @@ class BrowserScreen(TabPaneNavigation, ChromeActions):
             return
 
         if not force:
-            # Instant paint from disk so opening a session never waits on LLM.
+            # Instant paint from disk so opening a session never waits on deferred work.
             try:
                 cached = get_analysis_service().load_cached_all(self.session_dir, allow_stale=True)
             except Exception:
@@ -1325,7 +1331,7 @@ class BrowserScreen(TabPaneNavigation, ChromeActions):
                     self._apply_stale_analysis_hints(repaint=False)
                 return
 
-            # Auto-open never queues deferred LLM work. Cheap analyzers may
+            # Auto-open never queues deferred work. Cheap analyzers may
             # still run if cache is incomplete; deferred is cache-only until
             # the operator explicitly Analyze (force=True).
             if not self._auto_needs_background_job():
@@ -1558,6 +1564,8 @@ class BrowserScreen(TabPaneNavigation, ChromeActions):
         # load_events always paints the full list; restore View/Turn/search.
         self._reapply_timeline_view_filter()
         self._rebuild_turn_select()
+        if self._requested_prompt_index is not None:
+            self.select_prompt_index(self._requested_prompt_index)
         self._update_diff_tab()
         self._update_summary_tab()
         self._update_stats()
@@ -2255,7 +2263,7 @@ class BrowserScreen(TabPaneNavigation, ChromeActions):
 
         renderables: list = [panel_group(*header_blocks)]
         if report_artifact and str(report_artifact).strip():
-            # Reorder ## Issue blocks by Turn: (MF form drafts bake LLM order).
+            # Reorder issue blocks by Turn because source reports may use another order.
             report_md = order_report_markdown_by_turn(str(report_artifact).strip())
             for chunk in split_report_markdown_panes(report_md):
                 renderables.append(content_block(chunk, max_chars=12000))
@@ -2889,6 +2897,48 @@ class BrowserScreen(TabPaneNavigation, ChromeActions):
             return
         self._turn_filter = str(val)
         self._apply_timeline_filters()
+
+    @property
+    def selected_prompt_index(self) -> int | None:
+        """Source prompt index selected by the active timeline turn filter."""
+        turn_filter = getattr(self, "_turn_filter", "all")
+        if turn_filter in (None, "", "all"):
+            return None
+        try:
+            turn_index = int(turn_filter)
+        except (TypeError, ValueError):
+            return None
+        for segment in getattr(self, "_turn_segments", None) or []:
+            if segment.turn_index == turn_index:
+                return (
+                    segment.prompt_index
+                    if segment.prompt_index is not None
+                    else segment.turn_index
+                )
+        return None
+
+    def select_prompt_index(self, prompt_index: int) -> bool:
+        """Select the timeline segment carrying *prompt_index*."""
+        target = int(prompt_index)
+        self._requested_prompt_index = target
+        for segment in getattr(self, "_turn_segments", None) or []:
+            source_index = (
+                segment.prompt_index
+                if segment.prompt_index is not None
+                else segment.turn_index
+            )
+            if source_index != target:
+                continue
+            self._turn_filter = str(segment.turn_index)
+            self._requested_prompt_index = None
+            self._ensure_timeline_tab()
+            try:
+                self.query_one("#timeline-turn-select", Select).value = self._turn_filter
+            except Exception:
+                pass
+            self._apply_timeline_filters()
+            return True
+        return False
 
     def action_search(self) -> None:
         self._ensure_timeline_tab()
