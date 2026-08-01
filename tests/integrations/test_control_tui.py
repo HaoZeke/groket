@@ -61,19 +61,24 @@ def _write_session(traces: Path) -> Path:
     return session_dir
 
 
-async def _rpc_open(socket_path: Path, session_id: str) -> dict:
+async def _rpc_call(
+    socket_path: Path,
+    request_id: int,
+    method: str,
+    params: dict,
+) -> dict:
     reader, writer = await asyncio.open_unix_connection(socket_path)
     request = {
         "jsonrpc": "2.0",
-        "id": 1,
-        "method": "session/open",
-        "params": {"session": session_id, "promptIndex": 11},
+        "id": request_id,
+        "method": method,
+        "params": params,
     }
     writer.write(json.dumps(request).encode("utf-8") + b"\n")
     await writer.drain()
     while True:
         response = json.loads(await asyncio.wait_for(reader.readline(), timeout=3))
-        if response.get("id") == 1:
+        if response.get("id") == request_id:
             break
     writer.close()
     await writer.wait_closed()
@@ -95,7 +100,12 @@ async def test_tui_owns_control_socket_and_opens_catalog_session(tmp_path: Path)
 
     async with app.run_test(size=(120, 40)) as pilot:
         await _wait_until(pilot, socket_path.exists, description="control socket")
-        response = await _rpc_open(socket_path, session_dir.name)
+        response = await _rpc_call(
+            socket_path,
+            1,
+            "session/open",
+            {"session": session_dir.name, "promptIndex": 11},
+        )
         assert response["result"] == {"opened": True}
         await _wait_until(
             pilot,
@@ -103,6 +113,34 @@ async def test_tui_owns_control_socket_and_opens_catalog_session(tmp_path: Path)
                 isinstance(app.screen, BrowserScreen) and app.screen.selected_prompt_index == 11
             ),
             description="socket-selected prompt",
+        )
+        listed = await _rpc_call(
+            socket_path,
+            2,
+            "notes/list",
+            {"session": session_dir.name},
+        )
+        saved = await _rpc_call(
+            socket_path,
+            3,
+            "notes/upsert",
+            {
+                "session": session_dir.name,
+                "expectedRevision": listed["result"]["revision"],
+                "note": {
+                    "id": "n-live-editor",
+                    "turnIndex": 0,
+                    "fields": {"summary": "Live editor note"},
+                    "eventIndices": [],
+                },
+            },
+        )
+        assert saved["result"]["notes"][0]["id"] == "n-live-editor"
+        await _wait_until(
+            pilot,
+            lambda: isinstance(app.screen, BrowserScreen)
+            and any(note.id == "n-live-editor" for note in app.screen._notes_doc.notes),
+            description="BrowserScreen note refresh",
         )
 
     assert not socket_path.exists()
