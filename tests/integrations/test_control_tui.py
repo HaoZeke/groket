@@ -4,13 +4,27 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 
 from groket.ui.app import TraceEvalApp
 from groket.ui.screens.browser import BrowserScreen
-from tests.ui.pilot_helpers import wait_until
+from textual.pilot import Pilot
+
+
+async def _wait_until(
+    pilot: Pilot,
+    predicate: Callable[[], bool],
+    *,
+    description: str,
+) -> None:
+    for _ in range(80):
+        if predicate():
+            return
+        await pilot.pause()
+    raise AssertionError(f"timed out waiting for {description}")
 
 
 def _write_session(traces: Path) -> Path:
@@ -78,10 +92,10 @@ async def test_tui_owns_control_socket_and_opens_catalog_session(tmp_path: Path)
     )
 
     async with app.run_test(size=(120, 40)) as pilot:
-        await wait_until(pilot, socket_path.exists, description="control socket")
+        await _wait_until(pilot, socket_path.exists, description="control socket")
         response = await _rpc_open(socket_path, session_dir.name)
         assert response["result"] == {"opened": True}
-        await wait_until(
+        await _wait_until(
             pilot,
             lambda: isinstance(app.screen, BrowserScreen)
             and app.screen.selected_prompt_index == 11,
