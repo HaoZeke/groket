@@ -168,6 +168,31 @@ async def test_control_server_supports_emacs_jsonrpc_framing(tmp_path: Path) -> 
 
 
 @pytest.mark.asyncio
+async def test_control_server_publishes_tui_changes(tmp_path: Path) -> None:
+    control = import_module("groket.integrations.control")
+    session_dir = tmp_path / "session-tui-change"
+    _write_session(session_dir)
+    server = control.ControlServer(socket_path=tmp_path / "changes.sock")
+    await server.start()
+    try:
+        reader, writer = await asyncio.open_unix_connection(server.socket_path)
+        await server.publish_session_changed(session_dir)
+        session_message = json.loads(await asyncio.wait_for(reader.readline(), timeout=2))
+        assert session_message["method"] == "session/changed"
+        assert session_message["params"] == {"sessionId": session_dir.name}
+
+        await server.publish_notes_changed(session_dir)
+        notes_message = json.loads(await asyncio.wait_for(reader.readline(), timeout=2))
+        assert notes_message["method"] == "notes/changed"
+        assert notes_message["params"]["sessionId"] == session_dir.name
+        assert len(notes_message["params"]["revision"]) == 64
+        writer.close()
+        await writer.wait_closed()
+    finally:
+        await server.close()
+
+
+@pytest.mark.asyncio
 async def test_control_server_rejects_stale_note_mutation(tmp_path: Path) -> None:
     control = import_module("groket.integrations.control")
     session_dir = tmp_path / "session-notes"
