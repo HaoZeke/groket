@@ -169,6 +169,28 @@ async def test_control_server_supports_emacs_jsonrpc_framing(tmp_path: Path) -> 
 
 
 @pytest.mark.asyncio
+async def test_control_server_does_not_chmod_existing_socket_parent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    control = import_module("groket.integrations.control")
+    socket_path = tmp_path / "existing-parent.sock"
+    original_chmod = Path.chmod
+
+    def reject_parent_chmod(path: Path, mode: int, **kwargs: object) -> None:
+        if path == tmp_path:
+            raise PermissionError("socket parent is not owned by this process")
+        original_chmod(path, mode, **kwargs)
+
+    monkeypatch.setattr(Path, "chmod", reject_parent_chmod)
+    server = control.ControlServer(socket_path=socket_path)
+    await server.start()
+    try:
+        assert socket_path.is_socket()
+    finally:
+        await server.close()
+
+
+@pytest.mark.asyncio
 async def test_control_server_publishes_tui_changes(tmp_path: Path) -> None:
     control = import_module("groket.integrations.control")
     session_dir = tmp_path / "session-tui-change"
