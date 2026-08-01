@@ -103,6 +103,7 @@ class TestLaunchTui:
             launch_tui(path=tmp_path, config=None)
             assert len(captured_calls) == 1
             assert captured_calls[0]["work_dir"] == tmp_path.resolve()
+            assert captured_calls[0]["control_socket"].name == "control.sock"
 
             captured_calls.clear()
             launch_tui(path=None, config=None)
@@ -115,6 +116,55 @@ class TestLaunchTui:
             assert captured_calls[0]["config_path"] == cfg.expanduser()
         finally:
             ui_app_mod.TraceEvalApp = orig  # type: ignore[assignment,misc]
+
+    def test_launch_opens_explicit_session_and_prompt(self, tmp_path: Path) -> None:
+        captured_calls: list[dict] = []
+
+        class FakeApp:
+            def __init__(self, **kw: object):
+                captured_calls.append(kw)
+
+            def run(self) -> None:
+                pass
+
+        session = tmp_path / "runs" / "traces" / "session-cli-open"
+        session.mkdir(parents=True)
+        (session / "summary.json").write_text("{}", encoding="utf-8")
+        socket_path = tmp_path / "editor.sock"
+
+        with patch("groket.ui.app.TraceEvalApp", FakeApp):
+            launch_tui(
+                path=session,
+                config=None,
+                control_socket=socket_path,
+                prompt_index=17,
+            )
+
+        assert captured_calls == [
+            {
+                "traces_path": session.parent,
+                "work_dir": tmp_path,
+                "config_path": None,
+                "control_socket": socket_path,
+                "initial_session": session,
+                "initial_prompt_index": 17,
+            }
+        ]
+
+    def test_launch_can_disable_control_socket(self, tmp_path: Path) -> None:
+        captured_calls: list[dict] = []
+
+        class FakeApp:
+            def __init__(self, **kw: object):
+                captured_calls.append(kw)
+
+            def run(self) -> None:
+                pass
+
+        with patch("groket.ui.app.TraceEvalApp", FakeApp):
+            launch_tui(path=tmp_path, config=None, control_socket=False)
+
+        assert captured_calls[0]["control_socket"] is None
 
 
 class TestMainEntryArgv:
