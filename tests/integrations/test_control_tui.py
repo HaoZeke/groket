@@ -8,7 +8,6 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
-
 from groket.ui.app import TraceEvalApp
 from groket.ui.screens.browser import BrowserScreen
 from textual.pilot import Pilot
