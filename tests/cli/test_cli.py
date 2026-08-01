@@ -19,6 +19,7 @@ def test_help_lists_main_commands() -> None:
     assert "gen" in out
     assert "self-test" in out
     assert "batch" in out
+    assert "emacs-path" in out
     assert "audit" not in out
     result2 = runner.invoke(app, ["gen", "--help"])
     assert result2.exit_code == 0
@@ -27,7 +28,17 @@ def test_help_lists_main_commands() -> None:
 
 
 def test_tool_commands() -> None:
-    assert TOOL_COMMANDS == frozenset({"gen", "generator", "self-test", "batch", "rules"})
+    assert TOOL_COMMANDS == frozenset(
+        {"gen", "generator", "self-test", "batch", "rules", "emacs-path"}
+    )
+
+
+def test_emacs_path_prints_packaged_integration() -> None:
+    result = runner.invoke(app, ["emacs-path"])
+    assert result.exit_code == 0
+    path = Path(result.stdout.strip())
+    assert path.name == "groket.el"
+    assert path.is_file()
 
 
 class TestSelfTestCommand:
