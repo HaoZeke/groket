@@ -309,7 +309,12 @@ class ControlServer:
                 raise ControlError(501, "session opening is unavailable")
             raw_prompt = params.get("promptIndex")
             prompt_index = None if raw_prompt is None else json_as_int(raw_prompt)
-            opened = await self._open_session(self._session(params), prompt_index)
+            session = self._session(params)
+            opened = await self._open_session(session, prompt_index)
+            await self.notify(
+                "session/selected",
+                {"sessionId": session.name, "promptIndex": prompt_index},
+            )
             return {"opened": bool(opened)}
         if method == "notes/list":
             snapshot = await asyncio.to_thread(notes_snapshot, self._session(params))
@@ -318,27 +323,35 @@ class ControlServer:
             note_raw = params.get("note")
             if not isinstance(note_raw, dict):
                 raise ControlError(-32602, "note is required")
+            session = self._session(params)
             snapshot = await asyncio.to_thread(
                 upsert_note,
-                self._session(params),
+                session,
                 _note_from_params(as_json_object(note_raw)),
                 expected_revision=json_as_str(params.get("expectedRevision")),
             )
             result = _snapshot_mapping(snapshot)
-            await self.notify("notes/changed", {"revision": snapshot.revision})
+            await self.notify(
+                "notes/changed",
+                {"sessionId": session.name, "revision": snapshot.revision},
+            )
             return result
         if method == "notes/delete":
             note_id = json_as_str(params.get("noteId")).strip()
             if not note_id:
                 raise ControlError(-32602, "noteId is required")
+            session = self._session(params)
             snapshot = await asyncio.to_thread(
                 delete_note,
-                self._session(params),
+                session,
                 note_id,
                 expected_revision=json_as_str(params.get("expectedRevision")),
             )
             result = _snapshot_mapping(snapshot)
-            await self.notify("notes/changed", {"revision": snapshot.revision})
+            await self.notify(
+                "notes/changed",
+                {"sessionId": session.name, "revision": snapshot.revision},
+            )
             return result
         raise ControlError(-32601, "method not found", {"method": method})
 
