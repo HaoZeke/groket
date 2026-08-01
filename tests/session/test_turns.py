@@ -382,6 +382,32 @@ def test_follow_up_user_before_next_turn_started_is_own_turn() -> None:
     assert segs[1].turn_number == 1
 
 
+def test_segments_preserve_non_contiguous_prompt_indexes() -> None:
+    events = [
+        TraceEvent(index=0, event_type="turn_started", content="turn started  turn_number=1"),
+        TraceEvent(
+            index=1,
+            event_type="user_message_chunk",
+            content="first",
+            prompt_index=4,
+        ),
+        TraceEvent(index=2, event_type="turn_ended", content="turn ended  outcome=success"),
+        TraceEvent(index=3, event_type="turn_started", content="turn started  turn_number=2"),
+        TraceEvent(
+            index=4,
+            event_type="user_message_chunk",
+            content="second",
+            prompt_index=9,
+        ),
+        TraceEvent(index=5, event_type="turn_ended", content="turn ended  outcome=success"),
+    ]
+
+    segments = segment_timeline_turns(events)
+
+    assert [segment.turn_index for segment in segments] == [0, 1]
+    assert [segment.prompt_index for segment in segments] == [4, 9]
+
+
 def test_background_task_completion_turns_merge_into_parent() -> None:
     """Grok emits extra turn_started for background-task completions — fold into parent.
 

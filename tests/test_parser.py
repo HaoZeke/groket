@@ -176,6 +176,31 @@ class TestParseTimeline:
         user_events = [e for e in events if e.event_type == "user_message_chunk"]
         assert len(user_events) >= 1
 
+    def test_user_message_preserves_prompt_index(self, tmp_path: Path):
+        sd = tmp_path / "prompt-index"
+        sd.mkdir()
+        (sd / "updates.jsonl").write_text(
+            json.dumps(
+                {
+                    "timestamp": 1000,
+                    "params": {
+                        "update": {
+                            "sessionUpdate": "user_message_chunk",
+                            "content": {"type": "text", "text": "inspect the trace"},
+                            "_meta": {"promptIndex": 7},
+                        }
+                    },
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        events = parse_timeline(sd)
+
+        user = next(event for event in events if event.event_type == "user_message_chunk")
+        assert user.prompt_index == 7
+
     def test_tool_result_coalescing(self, session_dir):
         events = parse_timeline(session_dir)
         results = [e for e in events if e.event_type == "tool_call_update"]
