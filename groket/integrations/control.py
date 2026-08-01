@@ -128,6 +128,7 @@ class ControlServer:
         self._open_session = open_session
         self._server: asyncio.AbstractServer | None = None
         self._writers: set[asyncio.StreamWriter] = set()
+        self._writer_framing: dict[asyncio.StreamWriter, str] = {}
 
     async def start(self) -> None:
         """Bind the configured socket and begin accepting connections."""
@@ -171,6 +172,7 @@ class ControlServer:
             await server.wait_closed()
         writers = list(self._writers)
         self._writers.clear()
+        self._writer_framing.clear()
         for writer in writers:
             writer.close()
         for writer in writers:
@@ -189,18 +191,45 @@ class ControlServer:
         try:
             while not reader.at_eof():
                 try:
-                    line = await reader.readline()
+                    first_line = await reader.readline()
                 except (ValueError, asyncio.LimitOverrunError):
                     await self._send_error(writer, None, -32600, "message exceeds size limit")
                     break
-                if not line:
+                if not first_line:
                     break
-                if len(line) > MAX_MESSAGE_BYTES:
+                if first_line.lower().startswith(b"content-length:"):
+                    self._writer_framing[writer] = "headers"
+                    try:
+                        length = int(first_line.split(b":", 1)[1].strip())
+                    except ValueError:
+                        await self._send_error(writer, None, -32600, "invalid Content-Length")
+                        break
+                    while True:
+                        header = await reader.readline()
+                        if header in (b"\r\n", b"\n", b""):
+                            break
+                    if length < 0 or length > MAX_MESSAGE_BYTES:
+                        await self._send_error(
+                            writer,
+                            None,
+                            -32600,
+                            "message exceeds size limit",
+                        )
+                        break
+                    try:
+                        message = await reader.readexactly(length)
+                    except asyncio.IncompleteReadError:
+                        break
+                else:
+                    self._writer_framing.setdefault(writer, "newline")
+                    message = first_line
+                if len(message) > MAX_MESSAGE_BYTES:
                     await self._send_error(writer, None, -32600, "message exceeds size limit")
                     break
-                await self._handle_line(line, writer)
+                await self._handle_line(message, writer)
         finally:
             self._writers.discard(writer)
+            self._writer_framing.pop(writer, None)
             writer.close()
             try:
                 await writer.wait_closed()
@@ -338,7 +367,11 @@ class ControlServer:
             {"jsonrpc": "2.0", "id": request_id, "error": error},
         )
 
-    @staticmethod
-    async def _send(writer: asyncio.StreamWriter, payload: JsonObject) -> None:
-        writer.write(json.dumps(payload, separators=(",", ":")).encode("utf-8") + b"\n")
+    async def _send(self, writer: asyncio.StreamWriter, payload: JsonObject) -> None:
+        encoded = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+        if self._writer_framing.get(writer) == "headers":
+            header = f"Content-Length: {len(encoded)}\r\n\r\n".encode("ascii")
+            writer.write(header + encoded)
+        else:
+            writer.write(encoded + b"\n")
         await writer.drain()
