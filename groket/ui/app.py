@@ -398,9 +398,7 @@ class TraceEvalApp(App):
         )
         self._control_server = None
         self._initial_session = (
-            Path(initial_session).expanduser().resolve()
-            if initial_session is not None
-            else None
+            Path(initial_session).expanduser().resolve() if initial_session is not None else None
         )
         self._initial_prompt_index = initial_prompt_index
         self._analysis_jobs_active: int = 0
@@ -721,16 +719,12 @@ class TraceEvalApp(App):
     def control_session_changed(self, session_dir: Path) -> None:
         """Broadcast a changed trace projection."""
         if self._control_server is not None:
-            self._run_control_broadcast(
-                self._control_server.publish_session_changed(session_dir)
-            )
+            self._run_control_broadcast(self._control_server.publish_session_changed(session_dir))
 
     def control_notes_changed(self, session_dir: Path) -> None:
         """Broadcast a canonical operator-note mutation."""
         if self._control_server is not None:
-            self._run_control_broadcast(
-                self._control_server.publish_notes_changed(session_dir)
-            )
+            self._run_control_broadcast(self._control_server.publish_notes_changed(session_dir))
 
     _CACHE_FILE = META_CACHE_FILENAME
 
@@ -2378,9 +2372,7 @@ class TraceEvalApp(App):
     ) -> None:
         """Construct and push BrowserScreen on the main thread."""
         self._pause_home_traces_watch(pause=True)
-        self.push_screen(
-            BrowserScreen(session_path, plugin_results, prompt_index=prompt_index)
-        )
+        self.push_screen(BrowserScreen(session_path, plugin_results, prompt_index=prompt_index))
 
     def action_open_runner(self) -> None:
         self.push_screen(RunnerScreen(self.work_dir, run_manager=self.run_manager))

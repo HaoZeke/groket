@@ -99,8 +99,9 @@ async def test_tui_owns_control_socket_and_opens_catalog_session(tmp_path: Path)
         assert response["result"] == {"opened": True}
         await _wait_until(
             pilot,
-            lambda: isinstance(app.screen, BrowserScreen)
-            and app.screen.selected_prompt_index == 11,
+            lambda: (
+                isinstance(app.screen, BrowserScreen) and app.screen.selected_prompt_index == 11
+            ),
             description="socket-selected prompt",
         )
 

@@ -2920,9 +2920,7 @@ class BrowserScreen(TabPaneNavigation, ChromeActions):
         for segment in getattr(self, "_turn_segments", None) or []:
             if segment.turn_index == turn_index:
                 return (
-                    segment.prompt_index
-                    if segment.prompt_index is not None
-                    else segment.turn_index
+                    segment.prompt_index if segment.prompt_index is not None else segment.turn_index
                 )
         return None
 
@@ -2932,9 +2930,7 @@ class BrowserScreen(TabPaneNavigation, ChromeActions):
         self._requested_prompt_index = target
         for segment in getattr(self, "_turn_segments", None) or []:
             source_index = (
-                segment.prompt_index
-                if segment.prompt_index is not None
-                else segment.turn_index
+                segment.prompt_index if segment.prompt_index is not None else segment.turn_index
             )
             if source_index != target:
                 continue

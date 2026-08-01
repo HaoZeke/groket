@@ -99,9 +99,7 @@ def _note_from_params(data: JsonObject) -> NoteEntry:
     )
     raw_indices = data.get("eventIndices")
     event_indices = (
-        [json_as_int(value) for value in raw_indices]
-        if isinstance(raw_indices, list)
-        else []
+        [json_as_int(value) for value in raw_indices] if isinstance(raw_indices, list) else []
     )
     return NoteEntry(
         id=note_id,

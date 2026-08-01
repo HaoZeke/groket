@@ -76,9 +76,7 @@ rules_app = typer.Typer(
 app.add_typer(rules_app, name="rules")
 
 # Subcommand names — must not be consumed as a TUI path positional.
-TOOL_COMMANDS = frozenset(
-    {"gen", "generator", "self-test", "batch", "rules", "emacs-path"}
-)
+TOOL_COMMANDS = frozenset({"gen", "generator", "self-test", "batch", "rules", "emacs-path"})
 COMMAND_ALIASES = {"generator": "gen"}
 
 
