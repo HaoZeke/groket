@@ -72,7 +72,10 @@ async def _rpc_open(socket_path: Path, session_id: str) -> dict:
     }
     writer.write(json.dumps(request).encode("utf-8") + b"\n")
     await writer.drain()
-    response = json.loads(await asyncio.wait_for(reader.readline(), timeout=3))
+    while True:
+        response = json.loads(await asyncio.wait_for(reader.readline(), timeout=3))
+        if response.get("id") == 1:
+            break
     writer.close()
     await writer.wait_closed()
     return response
