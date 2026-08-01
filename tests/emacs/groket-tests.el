@@ -78,5 +78,57 @@ Original detail
     (search-forward "inspect this")
     (should (= (groket--prompt-index-at-point) 6))))
 
+(ert-deftest groket-session-reference-preserves-catalog-ids ()
+  (should (equal (groket--normalize-session-reference "session-emacs")
+                 "session-emacs"))
+  (let ((directory (make-temp-file "groket-session-" t)))
+    (unwind-protect
+        (should (equal (groket--normalize-session-reference directory)
+                       (file-truename directory)))
+      (delete-directory directory))))
+
+(ert-deftest groket-new-note-uses-schema-and-current-turn ()
+  (with-temp-buffer
+    (groket-session-mode)
+    (groket--apply-document groket-test--document "session-emacs" "rev-1" "session-emacs")
+    (goto-char (point-min))
+    (search-forward "inspect this")
+    (let (saved-note)
+      (cl-letf (((symbol-function 'groket-connect) (lambda () 'connection))
+                ((symbol-function 'groket-refresh) #'ignore)
+                ((symbol-function 'jsonrpc-request)
+                 (lambda (_connection method _params &rest _keys)
+                   (pcase method
+                     ("notes/list"
+                      '(:schema (:fields [(:id "summary") (:id "detail")])
+                        :revision "rev-1"))
+                     ("notes/upsert"
+                      (setq saved-note (plist-get _params :note))
+                      '(:revision "rev-2"))))))
+        (groket-new-note))
+      (should (= (plist-get saved-note :turnIndex) 0))
+      (should (string-prefix-p "n-" (plist-get saved-note :id)))
+      (should (equal (gethash "summary" (plist-get saved-note :fields)) ""))
+      (should (equal (gethash "detail" (plist-get saved-note :fields)) "")))))
+
+(ert-deftest groket-delete-note-sends-revision-safe-request ()
+  (with-temp-buffer
+    (groket-session-mode)
+    (groket--apply-document groket-test--document "session-emacs" "rev-1" "session-emacs")
+    (goto-char (point-min))
+    (search-forward "Original detail")
+    (let (sent-params)
+      (cl-letf (((symbol-function 'groket-connect) (lambda () 'connection))
+                ((symbol-function 'groket-refresh) #'ignore)
+                ((symbol-function 'jsonrpc-request)
+                 (lambda (_connection method params &rest _keys)
+                   (should (equal method "notes/delete"))
+                   (setq sent-params params)
+                   '(:revision "rev-2"))))
+        (groket-delete-note t))
+      (should (equal (plist-get sent-params :session) "session-emacs"))
+      (should (equal (plist-get sent-params :expectedRevision) "rev-1"))
+      (should (equal (plist-get sent-params :noteId) "n-emacs")))))
+
 (provide 'groket-tests)
 ;;; groket-tests.el ends here
