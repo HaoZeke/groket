@@ -6,6 +6,7 @@ UI entry point only: domain work goes through ``services``, ``analysis``,
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from contextlib import suppress
@@ -331,12 +332,27 @@ class TraceEvalApp(App):
             super().__init__()
             self.run = run
 
+    class _ControlOpenSession(Message):
+        """Control service request marshalled onto the Textual message loop."""
+
+        def __init__(
+            self,
+            session_dir: Path,
+            prompt_index: int | None,
+            result: asyncio.Future[bool],
+        ) -> None:
+            super().__init__()
+            self.session_dir = session_dir
+            self.prompt_index = prompt_index
+            self.result = result
+
     def __init__(
         self,
         traces_path: Path | None = None,
         work_dir: Path | None = None,
         *,
         config_path: Path | None = None,
+        control_socket: Path | None = None,
         **kwargs,
     ) -> None:
         setup_i18n()
@@ -375,6 +391,10 @@ class TraceEvalApp(App):
         self._sessions_table_primed = False
         self._exiting = False
         self._config_path = Path(config_path).expanduser() if config_path else None
+        self._control_socket = (
+            Path(control_socket).expanduser() if control_socket is not None else None
+        )
+        self._control_server = None
         self._analysis_jobs_active: int = 0
         self._self_test_summary: str = ""
         self._meta_only: list[tuple[SessionMeta, str]] = []
@@ -605,6 +625,62 @@ class TraceEvalApp(App):
         self._load_sessions(include_host=None)
         table.focus()
         self._schedule_live_sessions_poll()
+        self._start_control_service()
+
+    def _resolve_control_session(self, reference: str) -> Path | None:
+        """Resolve a path or catalog session id without a broad filesystem scan."""
+        candidate = Path(reference).expanduser()
+        if candidate.is_dir():
+            return candidate.resolve()
+        for meta, _label in self._meta_only:
+            if meta.session_id == reference or meta.session_dir.name == reference:
+                return meta.session_dir.resolve()
+        for root in self._session_catalog_roots():
+            candidate = root.path / reference
+            if candidate.is_dir():
+                return candidate.resolve()
+        return None
+
+    async def _control_open_session(
+        self,
+        session_dir: Path,
+        prompt_index: int | None,
+    ) -> bool:
+        """Request a browser transition through Textual's message queue."""
+        result = asyncio.get_running_loop().create_future()
+        self.post_message(self._ControlOpenSession(session_dir, prompt_index, result))
+        return await result
+
+    def _start_control_service(self) -> None:
+        if self._control_socket is None:
+            return
+        from ..integrations.control import ControlServer
+
+        self._control_server = ControlServer(
+            socket_path=self._control_socket,
+            resolve_session=self._resolve_control_session,
+            open_session=self._control_open_session,
+        )
+        self.run_worker(
+            self._control_server.serve_forever(),
+            name="editor-control-service",
+            group="editor-control-service",
+            exclusive=True,
+        )
+
+    def on_trace_eval_app__control_open_session(
+        self,
+        event: _ControlOpenSession,
+    ) -> None:
+        """Open a session requested by an editor client."""
+        if event.result.done():
+            return
+        try:
+            self.open_session_path(event.session_dir, prompt_index=event.prompt_index)
+        except Exception as exc:
+            event.result.set_exception(exc)
+        else:
+            event.result.set_result(True)
 
     _CACHE_FILE = META_CACHE_FILENAME
 
@@ -1043,7 +1119,7 @@ class TraceEvalApp(App):
                 t("notify-analysis-in-flight", n=skipped_inflight),
                 severity="information",
             )
-        # Serial analysis pool (default 1 worker) — avoids stampeding LLM/plugins.
+        # Serial analysis pool (default 1 worker) avoids stampeding plugins.
         from ..job_pools import get_analysis_pool
 
         self._analysis_jobs_active = max(0, int(self._analysis_jobs_active)) + len(pending)
