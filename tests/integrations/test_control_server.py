@@ -16,6 +16,7 @@ async def _request(
     request_id: int,
     method: str,
     params: dict | None = None,
+    notifications: list[dict] | None = None,
 ) -> dict:
     payload = {
         "jsonrpc": "2.0",
@@ -29,6 +30,8 @@ async def _request(
         response = json.loads(await asyncio.wait_for(reader.readline(), timeout=2))
         if response.get("id") == request_id:
             return response
+        if notifications is not None and "method" in response:
+            notifications.append(response)
 
 
 async def _header_request(
@@ -126,11 +129,19 @@ async def test_control_server_initializes_renders_and_opens_session(tmp_path: Pa
             3,
             "session/open",
             {"session": session_dir.name, "promptIndex": 6},
+            notifications := [],
         )
-        assert opened_response["result"] == {"opened": True}
-        assert opened == [(session_dir, 6)]
         writer.close()
         await writer.wait_closed()
+        assert opened_response["result"] == {"opened": True}
+        assert opened == [(session_dir, 6)]
+        assert notifications == [
+            {
+                "jsonrpc": "2.0",
+                "method": "session/selected",
+                "params": {"sessionId": session_dir.name, "promptIndex": 6},
+            }
+        ]
     finally:
         await server.close()
 
@@ -182,6 +193,7 @@ async def test_control_server_rejects_stale_note_mutation(tmp_path: Path) -> Non
             "fields": {"summary": "Socket note", "detail": "Inspect the event."},
             "eventIndices": [1],
         }
+        notifications: list[dict] = []
         saved = await _request(
             reader,
             writer,
@@ -192,6 +204,7 @@ async def test_control_server_rejects_stale_note_mutation(tmp_path: Path) -> Non
                 "expectedRevision": original_revision,
                 "note": entry,
             },
+            notifications,
         )
         saved_revision = saved["result"]["revision"]
         assert saved_revision != original_revision
@@ -226,6 +239,11 @@ async def test_control_server_rejects_stale_note_mutation(tmp_path: Path) -> Non
         assert deleted["result"]["notes"] == []
         writer.close()
         await writer.wait_closed()
+        assert notifications[0]["method"] == "notes/changed"
+        assert notifications[0]["params"] == {
+            "sessionId": session_dir.name,
+            "revision": saved_revision,
+        }
     finally:
         await server.close()
 
