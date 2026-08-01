@@ -13,11 +13,13 @@ from __future__ import annotations
 
 import logging
 import re
+from hashlib import sha256
 import tomllib
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from threading import Lock, RLock
 from uuid import uuid4
 
 from .models import JsonObject, as_json_object, json_as_object
@@ -182,6 +184,26 @@ class NotesDoc:
 
     def sorted_notes(self) -> list[NoteEntry]:
         return sorted(self.notes, key=lambda n: (n.turn_index, n.created_at, n.id))
+
+
+@dataclass(frozen=True)
+class NotesSnapshot:
+    """Canonical notes document and its content revision."""
+
+    doc: NotesDoc
+    revision: str
+
+
+class NotesConflict(RuntimeError):
+    """The canonical notes changed after an editor rendered its snapshot."""
+
+    def __init__(self, current_revision: str) -> None:
+        super().__init__("operator notes changed")
+        self.current_revision = current_revision
+
+
+_notes_locks_guard = Lock()
+_notes_locks: dict[str, RLock] = {}
 
 
 _DEFAULT_FIELDS: tuple[FieldSpec, ...] = (
@@ -377,12 +399,8 @@ def _try_load(path: Path, session_id: str) -> NotesDoc | None:
         return None
 
 
-def load_notes(session_dir: Path) -> NotesDoc:
-    """Load notes for *session_dir*; prefer newer of primary vs fallback.
-
-    :param session_dir: Grok session directory.
-    :returns: Parsed :class:`NotesDoc` (may be empty).
-    """
+def _load_notes_source(session_dir: Path) -> tuple[NotesDoc, Path | None]:
+    """Return the canonical document and source selected by load precedence."""
     session_dir = Path(session_dir)
     sid = session_dir.name
     primary, fallback = _notes_paths(session_dir)
@@ -390,18 +408,88 @@ def load_notes(session_dir: Path) -> NotesDoc:
     fallback_doc = _try_load(fallback, sid)
     if primary_doc is None:
         if fallback_doc is not None:
-            return fallback_doc
-        return NotesDoc(schema_id=load_schema().schema_id, session_id=sid)
+            return fallback_doc, fallback
+        return NotesDoc(schema_id=load_schema().schema_id, session_id=sid), None
     if fallback_doc is None or _mtime(primary) >= _mtime(fallback):
-        return primary_doc
-    return fallback_doc
+        return primary_doc, primary
+    return fallback_doc, fallback
+
+
+def load_notes(session_dir: Path) -> NotesDoc:
+    """Load notes for *session_dir*; prefer newer of primary vs fallback.
+
+    :param session_dir: Grok session directory.
+    :returns: Parsed :class:`NotesDoc` (may be empty).
+    """
+    return _load_notes_source(Path(session_dir))[0]
+
+
+def _content_revision(path: Path | None) -> str:
+    data = b""
+    if path is not None:
+        try:
+            data = path.read_bytes()
+        except OSError:
+            data = b""
+    return sha256(data).hexdigest()
+
+
+def notes_snapshot(session_dir: Path) -> NotesSnapshot:
+    """Load canonical notes with a revision suitable for guarded mutation."""
+    doc, source = _load_notes_source(Path(session_dir))
+    return NotesSnapshot(doc=doc, revision=_content_revision(source))
+
+
+def _notes_lock(session_dir: Path) -> RLock:
+    key = str(Path(session_dir).expanduser().absolute())
+    with _notes_locks_guard:
+        lock = _notes_locks.get(key)
+        if lock is None:
+            lock = RLock()
+            _notes_locks[key] = lock
+        return lock
+
+
+def upsert_note(
+    session_dir: Path,
+    entry: NoteEntry,
+    *,
+    expected_revision: str,
+) -> NotesSnapshot:
+    """Upsert one note when *expected_revision* is still canonical."""
+    session_dir = Path(session_dir)
+    with _notes_lock(session_dir):
+        current = notes_snapshot(session_dir)
+        if current.revision != expected_revision:
+            raise NotesConflict(current.revision)
+        current.doc.upsert(entry)
+        save_notes(session_dir, current.doc)
+        return notes_snapshot(session_dir)
+
+
+def delete_note(
+    session_dir: Path,
+    note_id: str,
+    *,
+    expected_revision: str,
+) -> NotesSnapshot:
+    """Delete one note when *expected_revision* is still canonical."""
+    session_dir = Path(session_dir)
+    with _notes_lock(session_dir):
+        current = notes_snapshot(session_dir)
+        if current.revision != expected_revision:
+            raise NotesConflict(current.revision)
+        if not current.doc.remove(note_id):
+            return current
+        save_notes(session_dir, current.doc)
+        return notes_snapshot(session_dir)
 
 
 def notes_mtime(session_dir: Path) -> float:
     """Newest mtime of session or fallback notes files (0 if none).
 
     Used by analysis cache invalidation so operator-note edits refresh
-    deferred LLM reviews.
+    deferred automated reviews.
 
     :param session_dir: Grok session directory.
     :returns: Unix mtime, or ``0.0`` when no notes file exists.
