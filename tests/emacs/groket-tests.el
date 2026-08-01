@@ -130,5 +130,31 @@ Original detail
       (should (equal (plist-get sent-params :expectedRevision) "rev-1"))
       (should (equal (plist-get sent-params :noteId) "n-emacs")))))
 
+(ert-deftest groket-notifications-target-the-matching-session ()
+  (let ((matching (generate-new-buffer " *groket-matching*"))
+        (other (generate-new-buffer " *groket-other*")))
+    (unwind-protect
+        (progn
+          (with-current-buffer matching
+            (groket-session-mode)
+            (groket--apply-document
+             groket-test--document "session-emacs" "rev-1" "session-emacs"))
+          (with-current-buffer other
+            (groket-session-mode)
+            (groket--apply-document
+             groket-test--document "session-other" "rev-1" "session-other"))
+          (groket--notification
+           nil 'notes/changed '(:sessionId "session-emacs" :revision "rev-2"))
+          (groket--notification
+           nil 'session/changed '(:sessionId "session-emacs"))
+          (with-current-buffer matching
+            (should groket-notes-stale)
+            (should groket-session-stale))
+          (with-current-buffer other
+            (should-not groket-notes-stale)
+            (should-not groket-session-stale)))
+      (kill-buffer matching)
+      (kill-buffer other))))
+
 (provide 'groket-tests)
 ;;; groket-tests.el ends here
