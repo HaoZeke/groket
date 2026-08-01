@@ -39,6 +39,7 @@
 (defvar-local groket-session-reference nil)
 (defvar-local groket-notes-revision nil)
 (defvar-local groket-notes-stale nil)
+(defvar-local groket-session-stale nil)
 
 (defun groket--socket-path ()
   "Return the expanded control socket path."
@@ -55,17 +56,22 @@
 
 (defun groket--notification (_connection method params)
   "Handle a server notification named METHOD with PARAMS."
-  (pcase (groket--method-name method)
-    ("notes/changed"
-     (dolist (buffer (buffer-list))
-       (with-current-buffer buffer
-         (when (derived-mode-p 'groket-session-mode)
-           (setq groket-notes-stale t)
-           (force-mode-line-update)))))
-    ("session/selected"
-     (let ((session (plist-get params :sessionId)))
-       (when session
-         (message "Groket selected session %s" session))))))
+  (let ((session (plist-get params :sessionId)))
+    (dolist (buffer (buffer-list))
+      (with-current-buffer buffer
+        (when (and (derived-mode-p 'groket-session-mode)
+                   (or (null session) (equal groket-session-id session)))
+          (pcase (groket--method-name method)
+            ("notes/changed" (setq groket-notes-stale t))
+            ("session/changed" (setq groket-session-stale t))
+            ("session/selected"
+             (let ((prompt-index (plist-get params :promptIndex)))
+               (when prompt-index
+                 (goto-char (point-min))
+                 (re-search-forward
+                  (format "^:GROKET_PROMPT_INDEX: %s$" prompt-index)
+                  nil t)))))
+          (force-mode-line-update))))))
 
 (defun groket--make-network-process (_connection)
   "Create the local process used by a JSON-RPC CONNECTION."
@@ -186,7 +192,8 @@
   (setq groket-session-id session-id
         groket-session-reference reference
         groket-notes-revision revision
-        groket-notes-stale nil)
+        groket-notes-stale nil
+        groket-session-stale nil)
   (set-buffer-modified-p nil)
   (goto-char (point-min)))
 
@@ -407,7 +414,10 @@
   "Major mode for live Groket Org session buffers."
   (setq-local write-contents-functions '(groket-save-buffer))
   (setq-local mode-line-process
-              '(:eval (when groket-notes-stale " Notes changed"))))
+              '(:eval
+                (concat
+                 (when groket-session-stale " Trace changed")
+                 (when groket-notes-stale " Notes changed")))))
 
 (provide 'groket)
 ;;; groket.el ends here
