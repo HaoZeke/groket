@@ -71,6 +71,7 @@ groket = [
     "locale/**/*.ftl",
     "locale/**/*.txt",
     "locale/**/README*",
+    "integrations/emacs/*.el",
     "_embedded_assets/**/*",
 ]
 
@@ -131,7 +132,7 @@ addopts = "--tb=short -rfE"
 source = ["groket"]
 branch = false
 # Non-library asset mirrors (text templates for image build / rules YAML copies).
-# Product gate is 100% of *importable* library code (AGENTS.md §4.5a).
+# Product gate is 100% of importable library code.
 omit = [
     "groket/_embedded_assets/*",
     "groket/_embedded_assets/**",
@@ -171,7 +172,7 @@ files = ["groket"]
 mypy_path = "."
 warn_unused_ignores = true
 # Returning third-party Any is noisy (Pydantic/Textual). Explicit Any *in our
-# source* is banned by scripts/check_typing_policy.py (AGENTS §4.1 / §4.5a).
+# source* is banned by scripts/check_typing_policy.py.
 # disallow_any_explicit also false-positives on Pydantic BaseModel classes.
 warn_return_any = false
 check_untyped_defs = true
@@ -196,4 +197,3 @@ module = "groket.ui.*"
 # Presentation layer: annotate incrementally.
 disallow_untyped_defs = false
 check_untyped_defs = false
-

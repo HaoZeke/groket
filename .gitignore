@@ -7,6 +7,7 @@ coverage.json
 dist/
 docs/_build/
 *.egg-info/
+*.elc
 /flags/
 htmlcov/
 /_meta_cache.json
