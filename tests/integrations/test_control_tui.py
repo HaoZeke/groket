@@ -106,3 +106,35 @@ async def test_tui_owns_control_socket_and_opens_catalog_session(tmp_path: Path)
         )
 
     assert not socket_path.exists()
+
+
+@pytest.mark.asyncio
+async def test_tui_control_helpers_publish_changes(tmp_path: Path) -> None:
+    published: list[tuple[str, Path, int | None]] = []
+
+    class StubServer:
+        async def publish_session_selected(self, path: Path, prompt_index: int | None) -> None:
+            published.append(("selected", path, prompt_index))
+
+        async def publish_session_changed(self, path: Path) -> None:
+            published.append(("session", path, None))
+
+        async def publish_notes_changed(self, path: Path) -> None:
+            published.append(("notes", path, None))
+
+    app = TraceEvalApp.__new__(TraceEvalApp)
+    app._control_server = StubServer()
+    workers: list = []
+    app.run_worker = lambda coroutine, **_kwargs: workers.append(coroutine)  # type: ignore[method-assign]
+    session = tmp_path / "session-publish"
+
+    app.control_session_selected(session, 9)
+    app.control_session_changed(session)
+    app.control_notes_changed(session)
+    await asyncio.gather(*workers)
+
+    assert published == [
+        ("selected", session, 9),
+        ("session", session, None),
+        ("notes", session, None),
+    ]
