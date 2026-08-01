@@ -114,6 +114,39 @@ browses that tree while keeping the default work root for new runs. Operator
 notes on host sessions write under ``~/.groket/notes/<session_id>/`` so the
 live Grok tree stays clean.
 
+### Emacs Org buffers
+
+The installed distribution includes an Emacs package for viewing the active
+session and editing operator notes in an Org buffer. Load the packaged file:
+
+```elisp
+(load (car (process-lines "groket" "emacs-path")))
+```
+
+Use `M-x groket-open-session` with a session directory or an id from the
+running catalog. When Groket is not running, a session directory starts the
+TUI in a terminal buffer. The TUI owns a private per-user Unix socket at
+`$XDG_RUNTIME_DIR/groket/control.sock`; set `groket-control-socket` when a
+different location is required.
+
+The Org projection keeps generated trace content read-only and leaves only
+operator-note field bodies editable. `operator_notes.toml` remains canonical;
+every mutation includes the revision used to render the buffer, so concurrent
+edits fail instead of overwriting a newer note.
+
+| Key | Action |
+|-----|--------|
+| `g` | Refresh the session projection |
+| `C-c C-o` | Select the prompt at point in the TUI |
+| `C-c C-c` | Save the note at point |
+| `C-x C-s` | Save all notes in the buffer |
+| `C-c C-n` | Create a note under the prompt at point |
+| `C-c C-k` | Delete the note at point |
+
+The TUI and Org buffer exchange prompt selection, trace-change, and note-change
+notifications over the same socket. `groket --no-control` disables the socket;
+`groket --control-socket PATH` selects another path.
+
 **Export as task** (`T` on Runner or Recipes): write a batch tasks YAML
 (prompt, repo/local path, persona, models, max_turns, yolo, …). A modal asks
 for the file path (default `~/.groket/tasks/<task_id>.yaml`). Run extras
@@ -158,8 +191,8 @@ and analysis reports next to cache JSON as ``*.md`` / ``*.org`` / ``*.txt``.
   a human report per analyzer (plugin ``artifacts["report"]`` or findings)
 - **`flags.json`** — operator flags (session or `~/.groket/flags/…`; outer only)
 - **`notes/`** — `operator_notes.toml` from the notes store. Schema is
-  `~/.groket/notes_schema.toml` (not bundled). **Authoring is TUI-only**
-  (`N` / `O`). Host notes live under `~/.groket/notes/`.
+  `~/.groket/notes_schema.toml` (not bundled). Author with the TUI (`N` / `O`)
+  or the Emacs Org buffer. Host notes live under `~/.groket/notes/`.
 
 ``trace-only`` is nest + readme + manifest. Host sessions often have no
 ``run/``. Packaging ``dir`` writes a folder instead of a tarball.
@@ -282,7 +315,6 @@ Supported, CI-gated packs under [`examples/`](examples/README.md) — copy into
 | Smallest detector + rule | [`examples/detection/minimal/`](examples/detection/minimal/) |
 | Full detector catalog | [`examples/detection/catalog/`](examples/detection/catalog/) |
 | Analysis plugin | [`examples/analysis/plugins/session_event_count.py`](examples/analysis/plugins/session_event_count.py) |
-| LLM analysis plugin | [`examples/analysis/plugins/llm_instruction_check.py`](examples/analysis/plugins/llm_instruction_check.py) |
 | Batch tasks | [`examples/tasks/demo_tasks.yaml`](examples/tasks/demo_tasks.yaml) |
 
 ```bash
@@ -299,5 +331,3 @@ make examples-check  # examples/ contract
 make test-cov        # pytest + coverage report
 make ci              # lint + schema-check + examples-check + test
 ```
-
-Conventions, architecture, and agent rules: [AGENTS.md](AGENTS.md).
