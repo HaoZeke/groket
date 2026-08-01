@@ -143,9 +143,15 @@
   "Return a live connection, starting Groket for SESSION when needed."
   (unless (groket-connected-p)
     (unless (file-exists-p (groket--socket-path))
-      (groket-start session nil))
+      (groket-start (and (file-directory-p session) session) nil))
     (groket-connect))
   groket--connection)
+
+(defun groket--normalize-session-reference (session)
+  "Expand SESSION when it names a directory and preserve catalog ids."
+  (if (file-directory-p session)
+      (file-truename session)
+    session))
 
 (defun groket--field-body-region ()
   "Return the body region of the Org field at point."
@@ -262,8 +268,8 @@
 
 (defun groket-open-session (session &optional prompt-index)
   "Open SESSION as an Org buffer and select PROMPT-INDEX in the TUI."
-  (interactive (list (read-directory-name "Session: ") nil))
-  (let* ((reference (expand-file-name session))
+  (interactive (list (read-string "Session path or id: ") nil))
+  (let* ((reference (groket--normalize-session-reference session))
          (connection (groket--connection-for-session reference))
          (result (jsonrpc-request
                   connection "session/render" `(:session ,reference)
@@ -310,6 +316,68 @@
     (force-mode-line-update)
     result))
 
+(defun groket--new-note-id ()
+  "Return a locally unique note id."
+  (concat
+   "n-"
+   (substring
+    (secure-hash 'sha256 (format "%s:%s:%s" (float-time) (random) (emacs-pid)))
+    0 12)))
+
+(defun groket-new-note ()
+  "Create an operator note under the prompt at point."
+  (interactive)
+  (let* ((turn-text (groket--ancestor-property "GROKET_TURN_INDEX"))
+         (prompt-index (groket--prompt-index-at-point)))
+    (unless (and turn-text prompt-index)
+      (user-error "Point is not inside a prompt"))
+    (let* ((connection (groket-connect))
+           (listed (jsonrpc-request
+                    connection "notes/list"
+                    `(:session ,groket-session-reference)
+                    :timeout groket-request-timeout))
+           (schema (plist-get listed :schema))
+           (field-specs (plist-get schema :fields))
+           (fields (make-hash-table :test #'equal))
+           (timestamp (format-time-string "%FT%T%:z" nil t)))
+      (mapc
+       (lambda (spec)
+         (let ((field-id (plist-get spec :id)))
+           (when field-id (puthash field-id "" fields))))
+       field-specs)
+      (let* ((note
+              `(:id ,(groket--new-note-id)
+                :turnIndex ,(string-to-number turn-text)
+                :fields ,fields
+                :eventIndices []
+                :createdAt ,timestamp
+                :updatedAt ,timestamp))
+             (result
+              (jsonrpc-request
+               connection "notes/upsert"
+               `(:session ,groket-session-reference
+                 :expectedRevision ,groket-notes-revision
+                 :note ,note)
+               :timeout groket-request-timeout)))
+        (setq groket-notes-revision (plist-get result :revision))
+        (groket-refresh)))))
+
+(defun groket-delete-note (&optional no-confirm)
+  "Delete the note at point, asking first unless NO-CONFIRM is non-nil."
+  (interactive)
+  (let ((note-id (groket--ancestor-property "GROKET_NOTE_ID")))
+    (unless note-id (user-error "Point is not inside an operator note"))
+    (when (or no-confirm (yes-or-no-p (format "Delete note %s? " note-id)))
+      (let ((result
+             (jsonrpc-request
+              (groket-connect) "notes/delete"
+              `(:session ,groket-session-reference
+                :expectedRevision ,groket-notes-revision
+                :noteId ,note-id)
+              :timeout groket-request-timeout)))
+        (setq groket-notes-revision (plist-get result :revision))
+        (groket-refresh)))))
+
 (defun groket-save-buffer ()
   "Save every operator note in the current session buffer."
   (interactive)
@@ -329,6 +397,8 @@
 (defvar-keymap groket-session-mode-map
   :parent org-mode-map
   "g" #'groket-refresh
+  "C-c C-n" #'groket-new-note
+  "C-c C-k" #'groket-delete-note
   "C-c C-o" #'groket-open-prompt-at-point
   "C-c C-c" #'groket-save-note
   "C-x C-s" #'groket-save-buffer)
