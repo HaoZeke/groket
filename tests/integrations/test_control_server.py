@@ -31,6 +31,31 @@ async def _request(
             return response
 
 
+async def _header_request(
+    reader: asyncio.StreamReader,
+    writer: asyncio.StreamWriter,
+    request_id: int,
+    method: str,
+    params: dict | None = None,
+) -> dict:
+    payload = json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "method": method,
+            "params": params or {},
+        },
+        ensure_ascii=False,
+    ).encode("utf-8")
+    writer.write(f"Content-Length: {len(payload)}\r\n\r\n".encode("ascii") + payload)
+    await writer.drain()
+    header = await asyncio.wait_for(reader.readline(), timeout=2)
+    assert header.startswith(b"Content-Length: ")
+    length = int(header.split(b":", 1)[1])
+    assert await reader.readline() == b"\r\n"
+    return json.loads(await reader.readexactly(length))
+
+
 def _write_session(session_dir: Path) -> None:
     session_dir.mkdir()
     (session_dir / "summary.json").write_text(
@@ -104,6 +129,27 @@ async def test_control_server_initializes_renders_and_opens_session(tmp_path: Pa
         )
         assert opened_response["result"] == {"opened": True}
         assert opened == [(session_dir, 6)]
+        writer.close()
+        await writer.wait_closed()
+    finally:
+        await server.close()
+
+
+@pytest.mark.asyncio
+async def test_control_server_supports_emacs_jsonrpc_framing(tmp_path: Path) -> None:
+    control = import_module("groket.integrations.control")
+    server = control.ControlServer(socket_path=tmp_path / "emacs.sock")
+    await server.start()
+    try:
+        reader, writer = await asyncio.open_unix_connection(server.socket_path)
+        initialized = await _header_request(
+            reader,
+            writer,
+            1,
+            "initialize",
+            {"protocolVersion": 1, "clientInfo": {"name": "Emacs"}},
+        )
+        assert initialized["result"]["protocolVersion"] == 1
         writer.close()
         await writer.wait_closed()
     finally:
