@@ -176,6 +176,13 @@ async def test_control_server_publishes_tui_changes(tmp_path: Path) -> None:
     await server.start()
     try:
         reader, writer = await asyncio.open_unix_connection(server.socket_path)
+        await _request(
+            reader,
+            writer,
+            1,
+            "initialize",
+            {"protocolVersion": 1, "clientInfo": {"name": "test-editor"}},
+        )
         await server.publish_session_changed(session_dir)
         session_message = json.loads(await asyncio.wait_for(reader.readline(), timeout=2))
         assert session_message["method"] == "session/changed"
