@@ -200,7 +200,7 @@ class TestSelectValueToFilter:
         assert TraceEvalApp._select_value_to_filter(None) == ""
 
     def test_model_id_passthrough(self) -> None:
-        assert TraceEvalApp._select_value_to_filter("gpt-4") == "gpt-4"
+        assert TraceEvalApp._select_value_to_filter("model-4") == "model-4"
 
 
 class TestFilterToSelectValue:
@@ -1213,6 +1213,87 @@ async def test_open_session_path(tmp_path: Path) -> None:
         )
         await pilot.press("escape")
         await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_open_session_path_selects_real_prompt_index(tmp_path: Path) -> None:
+    """Direct open waits for parsing and maps promptIndex to its timeline segment."""
+    from groket.ui.screens.browser import BrowserScreen
+
+    app, _, traces = _make_app(tmp_path, n_sessions=1)
+    sd = traces / "sess-000"
+    updates = [
+        {
+            "timestamp": 1001,
+            "params": {
+                "update": {
+                    "sessionUpdate": "user_message_chunk",
+                    "content": {"type": "text", "text": "first"},
+                    "_meta": {"promptIndex": 4},
+                }
+            },
+        },
+        {
+            "timestamp": 1002,
+            "params": {
+                "update": {
+                    "sessionUpdate": "agent_message_chunk",
+                    "content": {"type": "text", "text": "answer one"},
+                }
+            },
+        },
+        {
+            "timestamp": 2001,
+            "params": {
+                "update": {
+                    "sessionUpdate": "user_message_chunk",
+                    "content": {"type": "text", "text": "second"},
+                    "_meta": {"promptIndex": 9},
+                }
+            },
+        },
+        {
+            "timestamp": 2002,
+            "params": {
+                "update": {
+                    "sessionUpdate": "agent_message_chunk",
+                    "content": {"type": "text", "text": "answer two"},
+                }
+            },
+        },
+    ]
+    (sd / "updates.jsonl").write_text(
+        "".join(json.dumps(update) + "\n" for update in updates),
+        encoding="utf-8",
+    )
+    markers = [
+        {"type": "turn_started", "turn_number": 1, "ts": 1000},
+        {"type": "turn_ended", "outcome": "success", "ts": 1100},
+        {"type": "turn_started", "turn_number": 2, "ts": 2000},
+        {"type": "turn_ended", "outcome": "success", "ts": 2100},
+    ]
+    (sd / "events.jsonl").write_text(
+        "".join(json.dumps(marker) + "\n" for marker in markers),
+        encoding="utf-8",
+    )
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        await wait_until(pilot, lambda: len(app._meta_only) >= 1, description="sessions loaded")
+        app.open_session_path(sd, prompt_index=9)
+        await wait_until(
+            pilot,
+            lambda: isinstance(app.screen, BrowserScreen) and bool(app.screen.timeline),
+            description="prompt-targeted BrowserScreen",
+        )
+        browser = app.screen
+        assert isinstance(browser, BrowserScreen)
+        await wait_until(
+            pilot,
+            lambda: browser.selected_prompt_index == 9,
+            description="promptIndex 9 selected",
+        )
+        assert browser._turn_filter == "1"
+        assert browser.query_one("#browser-tabs").active == "tab-timeline"
 
 
 @pytest.mark.asyncio
