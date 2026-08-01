@@ -364,6 +364,20 @@ class ControlServer:
             except (ConnectionError, OSError):
                 self._writers.discard(writer)
 
+    async def publish_session_changed(self, session_dir: Path) -> None:
+        """Notify editor clients that a session projection changed."""
+        session = Path(session_dir)
+        await self.notify("session/changed", {"sessionId": session.name})
+
+    async def publish_notes_changed(self, session_dir: Path) -> None:
+        """Notify editor clients that canonical operator notes changed."""
+        session = Path(session_dir)
+        snapshot = await asyncio.to_thread(notes_snapshot, session)
+        await self.notify(
+            "notes/changed",
+            {"sessionId": session.name, "revision": snapshot.revision},
+        )
+
     async def _send_error(
         self,
         writer: asyncio.StreamWriter,
