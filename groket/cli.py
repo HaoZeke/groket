@@ -76,7 +76,9 @@ rules_app = typer.Typer(
 app.add_typer(rules_app, name="rules")
 
 # Subcommand names — must not be consumed as a TUI path positional.
-TOOL_COMMANDS = frozenset({"gen", "generator", "self-test", "batch", "rules"})
+TOOL_COMMANDS = frozenset(
+    {"gen", "generator", "self-test", "batch", "rules", "emacs-path"}
+)
 COMMAND_ALIASES = {"generator": "gen"}
 
 
@@ -118,6 +120,12 @@ def launch_tui(
         initial_session=session,
         initial_prompt_index=prompt_index,
     ).run()
+
+
+@app.command("emacs-path")
+def emacs_path() -> None:
+    """Print the installed groket.el path."""
+    typer.echo(Path(__file__).parent / "integrations" / "emacs" / "groket.el")
 
 
 @app.callback(invoke_without_command=True)
