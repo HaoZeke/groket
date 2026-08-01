@@ -690,11 +690,47 @@ class TraceEvalApp(App):
         if event.result.done():
             return
         try:
-            self.open_session_path(event.session_dir, prompt_index=event.prompt_index)
+            self.open_session_path(
+                event.session_dir,
+                prompt_index=event.prompt_index,
+                notify_control=False,
+            )
         except Exception as exc:
             event.result.set_exception(exc)
         else:
             event.result.set_result(True)
+
+    def _run_control_broadcast(self, coroutine) -> None:
+        """Run a control notification under Textual worker ownership."""
+        if self._control_server is None:
+            coroutine.close()
+            return
+        self.run_worker(coroutine, group="editor-control-broadcasts")
+
+    def control_session_selected(
+        self,
+        session_dir: Path,
+        prompt_index: int | None,
+    ) -> None:
+        """Broadcast the session and prompt selected in the TUI."""
+        if self._control_server is not None:
+            self._run_control_broadcast(
+                self._control_server.publish_session_selected(session_dir, prompt_index)
+            )
+
+    def control_session_changed(self, session_dir: Path) -> None:
+        """Broadcast a changed trace projection."""
+        if self._control_server is not None:
+            self._run_control_broadcast(
+                self._control_server.publish_session_changed(session_dir)
+            )
+
+    def control_notes_changed(self, session_dir: Path) -> None:
+        """Broadcast a canonical operator-note mutation."""
+        if self._control_server is not None:
+            self._run_control_broadcast(
+                self._control_server.publish_notes_changed(session_dir)
+            )
 
     _CACHE_FILE = META_CACHE_FILENAME
 
@@ -2301,15 +2337,22 @@ class TraceEvalApp(App):
         *,
         live: bool | None = None,
         prompt_index: int | None = None,
+        notify_control: bool = True,
     ) -> None:
         """Open a session path in the trace browser (main list, Jobs modal, etc.)."""
-        self._open_session(str(session_dir), live=live, prompt_index=prompt_index)
+        self._open_session(
+            str(session_dir),
+            live=live,
+            prompt_index=prompt_index,
+            notify_control=notify_control,
+        )
 
     def _open_session(
         self,
         row_key: str,
         live: bool | None = None,
         prompt_index: int | None = None,
+        notify_control: bool = True,
     ) -> None:
         """Open a session in the browser immediately.
 
@@ -2317,7 +2360,10 @@ class TraceEvalApp(App):
         so the screen appears without delay.
         """
         plugin_results = self._plugin_results.get(row_key)
-        self._push_browser(Path(row_key), plugin_results, prompt_index=prompt_index)
+        session_path = Path(row_key)
+        self._push_browser(session_path, plugin_results, prompt_index=prompt_index)
+        if notify_control:
+            self.control_session_selected(session_path, prompt_index)
 
     def _push_runner_with_prefill(self, prefill: RunnerPrefill) -> None:
         """Construct and push RunnerScreen on the main thread."""
@@ -2752,6 +2798,7 @@ class TraceEvalApp(App):
 
         new_metas: list[tuple[str, SessionMeta, str]] = []
         outcome_updates: list[tuple[str, str]] = []  # key, new outcome
+        changed_sessions: dict[str, Path] = {}
 
         for sd in found:
             try:
@@ -2783,6 +2830,9 @@ class TraceEvalApp(App):
             # follow-up is running / awaiting again. Never apply non-live probe
             # results (that would invent interrupted/cancelled).
             if mtime > 0:
+                previous_mtime = self._session_mtimes.get(key)
+                if previous_mtime is not None and mtime > previous_mtime:
+                    changed_sessions[key] = sd_res
                 self._session_mtimes[key] = mtime
             try:
                 outcome = list_turn_outcome_for_dir(sd_res)
@@ -2821,7 +2871,7 @@ class TraceEvalApp(App):
                         outcome_updates.append((key, outcome))
                 continue
 
-        if not new_metas and not outcome_updates:
+        if not new_metas and not outcome_updates and not changed_sessions:
             return
 
         def _apply() -> None:
@@ -2866,6 +2916,8 @@ class TraceEvalApp(App):
             if changed:
                 with suppress(Exception):
                     self._populate_session_table()
+            for session_dir in changed_sessions.values():
+                self.control_session_changed(session_dir)
 
         try:
             call_ui(self, _apply)

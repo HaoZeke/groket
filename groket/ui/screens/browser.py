@@ -39,7 +39,16 @@ from ...analysis.order import order_report_markdown_by_turn, sort_findings_by_tu
 from ...constants import DIFF_TRUNCATE_HEAD, DIFF_TRUNCATE_TAIL, DIFF_TRUNCATE_THRESHOLD
 from ...flags import load_flags, save_flags
 from ...models import Flag, SessionMeta, TraceEvent
-from ...notes import NoteEntry, NotesDoc, load_notes, load_schema, save_notes
+from ...notes import (
+    NoteEntry,
+    NotesConflict,
+    NotesDoc,
+    delete_note,
+    load_notes,
+    load_schema,
+    notes_snapshot,
+    upsert_note,
+)
 from ...parser import load_session_meta, parse_timeline
 from ...session.workspace_diff import format_diff_meta_line, load_workspace_diff
 from ...utils import fmt_duration
@@ -3160,33 +3169,43 @@ class BrowserScreen(TabPaneNavigation, ChromeActions):
         if result is None:
             return
         action, payload = result
-        disk = load_notes(self.session_dir)
-        disk.schema_id = load_schema().schema_id
+        current = notes_snapshot(self.session_dir)
+        current.doc.schema_id = load_schema().schema_id
         notify = ""
-        if action == "save":
-            if not isinstance(payload, NoteEntry):
-                return
-            was_update = any(n.id == payload.id for n in disk.notes)
-            disk.upsert(payload)
-            notify = (
-                U.note_updated(payload.turn_index)
-                if was_update
-                else U.note_saved(payload.turn_index)
-            )
-        elif action == "delete":
-            disk.remove(str(payload))
-            notify = U.note_deleted()
-        else:
-            return
         try:
-            save_notes(self.session_dir, disk)
-        except OSError as exc:
+            if action == "save":
+                if not isinstance(payload, NoteEntry):
+                    return
+                was_update = any(n.id == payload.id for n in current.doc.notes)
+                saved = upsert_note(
+                    self.session_dir,
+                    payload,
+                    expected_revision=current.revision,
+                )
+                notify = (
+                    U.note_updated(payload.turn_index)
+                    if was_update
+                    else U.note_saved(payload.turn_index)
+                )
+            elif action == "delete":
+                saved = delete_note(
+                    self.session_dir,
+                    str(payload),
+                    expected_revision=current.revision,
+                )
+                notify = U.note_deleted()
+            else:
+                return
+        except (NotesConflict, OSError) as exc:
             self.notify(U.note_save_failed(str(exc)), severity="error")
             return
-        self._notes_doc = disk
+        self._notes_doc = saved.doc
         self._notes_loaded = True
         self.notify(notify)
         self._update_reports_tab()
+        control_notify = getattr(self.app, "control_notes_changed", None)
+        if callable(control_notify):
+            control_notify(self.session_dir)
 
     def _refresh_event_chrome(self) -> None:
         """Re-paint timeline Flags column + detail for the current event."""

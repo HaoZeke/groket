@@ -369,6 +369,18 @@ class ControlServer:
         session = Path(session_dir)
         await self.notify("session/changed", {"sessionId": session.name})
 
+    async def publish_session_selected(
+        self,
+        session_dir: Path,
+        prompt_index: int | None,
+    ) -> None:
+        """Notify editor clients about the TUI's active session and prompt."""
+        session = Path(session_dir)
+        await self.notify(
+            "session/selected",
+            {"sessionId": session.name, "promptIndex": prompt_index},
+        )
+
     async def publish_notes_changed(self, session_dir: Path) -> None:
         """Notify editor clients that canonical operator notes changed."""
         session = Path(session_dir)
