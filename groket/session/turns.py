@@ -19,6 +19,7 @@ class TurnSegment:
 
     turn_index: int  # 0-based index in this session
     turn_number: int | None  # from harness marker when present
+    prompt_index: int | None = None  # source _meta.promptIndex from the operator message
     outcome: str = ""  # last turn_ended outcome for this segment ("" if open)
     open: bool = False  # no turn_ended yet
     events: list[TraceEvent] = field(default_factory=list)
@@ -181,6 +182,19 @@ def _renumber_segments(segments: list[TurnSegment]) -> list[TurnSegment]:
     return segments
 
 
+def _assign_prompt_indexes(segments: list[TurnSegment]) -> list[TurnSegment]:
+    for seg in segments:
+        seg.prompt_index = next(
+            (
+                event.prompt_index
+                for event in seg.events
+                if event.event_type in et.USER_TYPES and event.prompt_index is not None
+            ),
+            None,
+        )
+    return segments
+
+
 def _merge_background_completion_segments(
     segments: list[TurnSegment],
 ) -> list[TurnSegment]:
@@ -256,7 +270,7 @@ def segment_timeline_turns(timeline: list[TraceEvent]) -> list[TurnSegment]:
 
     has_markers = any(_is_turn_started(e) or _is_turn_ended(e) for e in turn_events)
     if not has_markers:
-        return [
+        return _assign_prompt_indexes([
             TurnSegment(
                 turn_index=0,
                 turn_number=None,
@@ -264,7 +278,7 @@ def segment_timeline_turns(timeline: list[TraceEvent]) -> list[TurnSegment]:
                 open=True,
                 events=list(turn_events),
             )
-        ]
+        ])
 
     segments: list[TurnSegment] = []
     current: TurnSegment | None = None
@@ -361,7 +375,7 @@ def segment_timeline_turns(timeline: list[TraceEvent]) -> list[TurnSegment]:
         segments.append(current)
 
     segments = _merge_background_completion_segments(segments)
-    return _renumber_segments(segments)
+    return _assign_prompt_indexes(_renumber_segments(segments))
 
 
 def turn_summary_rows(

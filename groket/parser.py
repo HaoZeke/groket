@@ -520,6 +520,25 @@ def _extract_message_text(content) -> str:
     return json.dumps(content)
 
 
+def _message_prompt_index(update: JsonObject) -> int | None:
+    meta = update.get("_meta")
+    if not isinstance(meta, dict):
+        return None
+    value = meta.get("promptIndex")
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(value.strip())
+        except ValueError:
+            return None
+    return None
+
+
 def _coalesce_tool_result(
     update: dict,
     ts: int | str | None,
@@ -823,6 +842,7 @@ def _consume_updates_line(line: bytes, line_no: int, state: _UpdatesScanState) -
     if etype in _MESSAGE_TYPE_MAP:
         content = _extract_message_text(update.get("content", ""))
         mapped = _MESSAGE_TYPE_MAP[etype]
+        prompt_index = _message_prompt_index(update)
         # Agent thought/message streams are append-only deltas → one row.
         # User chunks are different: Grok often re-emits the *full* draft
         # (partial then complete). Merge only when one is a prefix of the other
@@ -845,6 +865,8 @@ def _consume_updates_line(line: bytes, line_no: int, state: _UpdatesScanState) -
                     if ts is not None:
                         prev.timestamp = ts
                     prev.update_index = line_no
+                    if prompt_index is not None:
+                        prev.prompt_index = prompt_index
                 else:
                     events.append(
                         TraceEvent(
@@ -853,6 +875,7 @@ def _consume_updates_line(line: bytes, line_no: int, state: _UpdatesScanState) -
                             timestamp=ts,
                             content=content,
                             update_index=line_no,
+                            prompt_index=prompt_index,
                         )
                     )
                     state.idx = idx + 1
@@ -864,6 +887,7 @@ def _consume_updates_line(line: bytes, line_no: int, state: _UpdatesScanState) -
                     timestamp=ts,
                     content=content,
                     update_index=line_no,
+                    prompt_index=prompt_index,
                 )
             )
             state.idx = idx + 1
