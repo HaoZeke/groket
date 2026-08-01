@@ -133,8 +133,14 @@ class ControlServer:
 
     async def start(self) -> None:
         """Bind the configured socket and begin accepting connections."""
-        self.socket_path.parent.mkdir(parents=True, exist_ok=True)
-        self.socket_path.parent.chmod(0o700)
+        socket_parent = self.socket_path.parent
+        try:
+            socket_parent.mkdir(parents=True)
+        except FileExistsError:
+            if not socket_parent.is_dir():
+                raise
+        else:
+            socket_parent.chmod(0o700)
         if self.socket_path.exists():
             try:
                 reader, writer = await asyncio.wait_for(
