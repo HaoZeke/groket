@@ -270,15 +270,17 @@ def segment_timeline_turns(timeline: list[TraceEvent]) -> list[TurnSegment]:
 
     has_markers = any(_is_turn_started(e) or _is_turn_ended(e) for e in turn_events)
     if not has_markers:
-        return _assign_prompt_indexes([
-            TurnSegment(
-                turn_index=0,
-                turn_number=None,
-                outcome="",
-                open=True,
-                events=list(turn_events),
-            )
-        ])
+        return _assign_prompt_indexes(
+            [
+                TurnSegment(
+                    turn_index=0,
+                    turn_number=None,
+                    outcome="",
+                    open=True,
+                    events=list(turn_events),
+                )
+            ]
+        )
 
     segments: list[TurnSegment] = []
     current: TurnSegment | None = None
