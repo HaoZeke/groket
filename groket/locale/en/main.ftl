@@ -1890,15 +1890,36 @@ ui-nothing-to-launch-no-models = Nothing to launch (no models)
 
 ui-nothing-to-refresh = Nothing to refresh:
 
-ui-copied-selection = Copied selection to clipboard
+# {$count} = Unicode scalar count of clipboard payload (herdr-style copy toast).
+ui-copied-selection =
+    { $count ->
+        [one] Copied selection (1 character) to clipboard
+       *[other] Copied selection ({$count} characters) to clipboard
+    }
 
-ui-copied-detail = Copied detail to clipboard
+ui-copied-detail =
+    { $count ->
+        [one] Copied detail (1 character) to clipboard
+       *[other] Copied detail ({$count} characters) to clipboard
+    }
 
-ui-copied-report = Copied report to clipboard
+ui-copied-report =
+    { $count ->
+        [one] Copied report (1 character) to clipboard
+       *[other] Copied report ({$count} characters) to clipboard
+    }
 
-ui-copied-content = Copied to clipboard
+ui-copied-content =
+    { $count ->
+        [one] Copied 1 character to clipboard
+       *[other] Copied {$count} characters to clipboard
+    }
 
-ui-copied-finding = Copied finding (Issue box) to clipboard
+ui-copied-finding =
+    { $count ->
+        [one] Copied finding (Issue box, 1 character) to clipboard
+       *[other] Copied finding (Issue box, {$count} characters) to clipboard
+    }
 
 ui-nothing-to-copy = Nothing to copy
 

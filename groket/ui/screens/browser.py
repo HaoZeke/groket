@@ -3071,16 +3071,17 @@ class BrowserScreen(TabPaneNavigation, ChromeActions):
             self.notify(t("ui-nothing-to-copy"), severity="warning")
             return
         self.app.copy_to_clipboard(text)
+        n = len(text)
         if kind == "selection":
-            self.notify(t("ui-copied-selection"), severity="information")
+            self.notify(t("ui-copied-selection", count=n), severity="information")
         elif kind == "finding":
-            self.notify(t("ui-copied-finding"), severity="information")
+            self.notify(t("ui-copied-finding", count=n), severity="information")
         elif kind == "report":
-            self.notify(t("ui-copied-report"), severity="information")
+            self.notify(t("ui-copied-report", count=n), severity="information")
         elif kind == "detail":
-            self.notify(t("ui-copied-detail"), severity="information")
+            self.notify(t("ui-copied-detail", count=n), severity="information")
         else:
-            self.notify(t("ui-copied-content"), severity="information")
+            self.notify(t("ui-copied-content", count=n), severity="information")
 
     def action_flag_event(self) -> None:
         """Open the flag modal for the currently selected timeline event."""

@@ -309,7 +309,10 @@ class TraceEvalApp(App):
             selected = None
         if selected:
             self.copy_to_clipboard(selected)
-            self.notify(t("ui-copied-selection"), severity="information")
+            self.notify(
+                t("ui-copied-selection", count=len(selected)),
+                severity="information",
+            )
             return
         for key, active_binding in self.active_bindings.items():
             if active_binding.binding.action in ("quit", "app.quit"):
