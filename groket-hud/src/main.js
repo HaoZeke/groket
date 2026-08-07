@@ -100,6 +100,15 @@ let liveOverviewGen = 0;
 /** Last overview fingerprint painted for the selected session (skip no-op paints). */
 let overviewPaintFp = "";
 
+const requestSessionList = latestSingleFlight(async (needle) =>
+  rpcPayload(
+    await invoke("control_session_list", {
+      ...(needle ? { query: needle } : {}),
+      limit: needle ? 200 : 300,
+    }),
+  ),
+);
+
 // Default chrome; overwritten from Rust after resolve (config / env override).
 if (!/Mac|iPhone|iPod|iPad/i.test(navigator.platform)) {
   hotkeyHint.textContent = "Ctrl⇧G";
@@ -1748,13 +1757,8 @@ async function refreshListFromServer(opts = {}) {
   try {
     const needle = queryText();
     // Server substring filter is the control contract for list discovery.
-    const listed = rpcPayload(
-      await invoke("control_session_list", {
-        // omit query when empty — some IPC paths mishandle explicit null for Option
-        ...(needle ? { query: needle } : {}),
-        limit: needle ? 200 : 300,
-      }),
-    );
+    // Omit query when empty; some IPC paths mishandle explicit null for Option.
+    const listed = await requestSessionList(needle);
     const rows = sessionRowsFromList(listed);
     allSessions = rows;
     listLoading = false;

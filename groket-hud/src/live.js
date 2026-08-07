@@ -60,6 +60,44 @@ export const LIVE_POLL_MS = 3000;
 export const IDLE_POLL_MS = 15000;
 
 /**
+ * Serialize async work while retaining the newest arguments queued in flight.
+ * Every caller joins the same promise; a changed request runs after the active
+ * one instead of overlapping it.
+ * @param {(...args: any[]) => Promise<any>} run
+ * @returns {(...args: any[]) => Promise<any>}
+ */
+export function latestSingleFlight(run) {
+  let pending = null;
+  let queuedArgs = null;
+  return (...args) => {
+    if (pending) {
+      queuedArgs = args;
+      return pending;
+    }
+    pending = (async () => {
+      let currentArgs = args;
+      let result;
+      let failure = null;
+      while (currentArgs) {
+        queuedArgs = null;
+        try {
+          result = await run(...currentArgs);
+          failure = null;
+        } catch (error) {
+          failure = error;
+        }
+        currentArgs = queuedArgs;
+      }
+      if (failure) throw failure;
+      return result;
+    })().finally(() => {
+      pending = null;
+    });
+    return pending;
+  };
+}
+
+/**
  * List offset for a seek window around a timeline event index.
  * Unfiltered ``session/timeline`` offsets match sequential ``event.index``.
  * @param {number} focusIndex
