@@ -10,6 +10,8 @@ from pathlib import Path
 
 import pytest
 
+from groket.integrations.control_client import ControlClient
+
 
 def _short_sock(name: str) -> Path:
     root = Path(tempfile.mkdtemp(prefix="groket-ctl-"))
@@ -81,3 +83,33 @@ async def test_session_open_notifies_without_open_callback(tmp_path: Path) -> No
         await writer.wait_closed()
     finally:
         await server.close()
+
+
+@pytest.mark.asyncio
+async def test_session_open_one_shot_client_disconnects_cleanly(tmp_path: Path) -> None:
+    daemon = import_module("groket.integrations.daemon")
+    work = tmp_path / "work"
+    traces = work / "runs" / "traces"
+    session = traces / "sess-open-once"
+    _write_session(session)
+    sock = _short_sock("open-once.sock")
+    server = daemon.build_domain_control_server(
+        socket_path=sock,
+        work_dir=work,
+        traces_path=traces,
+    )
+    loop = asyncio.get_running_loop()
+    prior_handler = loop.get_exception_handler()
+    unhandled: list[dict[str, object]] = []
+    loop.set_exception_handler(lambda _loop, context: unhandled.append(context))
+    await server.start()
+    try:
+        client = ControlClient(sock)
+        result = await client.session_open(str(session), prompt_index=3)
+        assert result == {"opened": True}
+        await asyncio.sleep(0.05)
+    finally:
+        await server.close()
+        await asyncio.sleep(0)
+        loop.set_exception_handler(prior_handler)
+    assert unhandled == []
