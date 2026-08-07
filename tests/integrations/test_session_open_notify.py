@@ -9,7 +9,6 @@ from importlib import import_module
 from pathlib import Path
 
 import pytest
-
 from groket.integrations.control_client import ControlClient
 
 
