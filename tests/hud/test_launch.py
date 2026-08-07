@@ -95,6 +95,9 @@ def test_ensure_hud_binary_does_not_rebuild_installed_path_binary(tmp_path: Path
     binary.parent.mkdir()
     binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
     binary.chmod(0o755)
+    now = time.time()
+    os.utime(binary, (now, now))
+    os.utime(source, (now + 10, now + 10))
 
     with (
         patch.object(launch_mod, "hud_checkout_dir", return_value=checkout),
