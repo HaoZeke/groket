@@ -446,13 +446,17 @@ async def test_control_server_drops_disconnected_clients_from_broadcasts(tmp_pat
         reader, writer = await asyncio.open_unix_connection(server.socket_path)
         await _request(reader, writer, 1, "initialize", {"protocolVersion": 1})
         disconnected = next(iter(server._writers))
+        original_drain = disconnected.drain
 
         async def broken_drain() -> None:
             raise BrokenPipeError("peer closed")
 
         disconnected.drain = broken_drain  # type: ignore[method-assign]
-        await server.publish_session_changed(session_dir)
-        assert disconnected not in server._writers
+        try:
+            await server.publish_session_changed(session_dir)
+            assert disconnected not in server._writers
+        finally:
+            disconnected.drain = original_drain  # type: ignore[method-assign]
         writer.close()
         await writer.wait_closed()
     finally:
