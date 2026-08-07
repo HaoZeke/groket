@@ -436,6 +436,30 @@ async def test_control_server_drops_stalled_clients_from_broadcasts(
 
 
 @pytest.mark.asyncio
+async def test_control_server_drops_disconnected_clients_from_broadcasts(tmp_path: Path) -> None:
+    control = import_module("groket.integrations.control")
+    session_dir = tmp_path / "session-disconnected"
+    _write_session(session_dir)
+    server = control.ControlServer(socket_path=_short_sock("disconnected.sock"))
+    await server.start()
+    try:
+        reader, writer = await asyncio.open_unix_connection(server.socket_path)
+        await _request(reader, writer, 1, "initialize", {"protocolVersion": 1})
+        disconnected = next(iter(server._writers))
+
+        async def broken_drain() -> None:
+            raise BrokenPipeError("peer closed")
+
+        disconnected.drain = broken_drain  # type: ignore[method-assign]
+        await server.publish_session_changed(session_dir)
+        assert disconnected not in server._writers
+        writer.close()
+        await writer.wait_closed()
+    finally:
+        await server.close()
+
+
+@pytest.mark.asyncio
 async def test_control_server_returns_jsonrpc_errors(tmp_path: Path) -> None:
     control = import_module("groket.integrations.control")
     server = control.ControlServer(socket_path=_short_sock("errors.sock"))
