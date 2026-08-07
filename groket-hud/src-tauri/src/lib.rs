@@ -69,7 +69,9 @@ async fn control_session_overview(
 }
 
 #[tauri::command]
-async fn control_session_turns(session: String) -> Result<serde_json::Value, control::ControlError> {
+async fn control_session_turns(
+    session: String,
+) -> Result<serde_json::Value, control::ControlError> {
     control_blocking(move || control::session_turns(&session)).await
 }
 
@@ -90,7 +92,9 @@ async fn control_notes_list(session: String) -> Result<serde_json::Value, contro
 }
 
 #[tauri::command]
-async fn control_session_usage(session: String) -> Result<serde_json::Value, control::ControlError> {
+async fn control_session_usage(
+    session: String,
+) -> Result<serde_json::Value, control::ControlError> {
     control_blocking(move || control::session_usage(&session)).await
 }
 

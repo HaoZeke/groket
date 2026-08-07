@@ -182,15 +182,14 @@ fn request_once(path: &Path, method: &str, params: &Value) -> Result<Value, Cont
             ControlError::Message(format!("write {method}: {e}"))
         }
     })?;
-    stream.flush().map_err(|e| ControlError::Message(format!("flush {method}: {e}")))?;
+    stream
+        .flush()
+        .map_err(|e| ControlError::Message(format!("flush {method}: {e}")))?;
     let mut reader = BufReader::new(stream);
     let mut response = String::new();
     reader.read_line(&mut response).map_err(|e| {
         // macOS SO_RCVTIMEO often returns EAGAIN (35) instead of ETIMEDOUT.
-        ControlError::Message(format!(
-            "read {method} from {}: {e}",
-            path.display()
-        ))
+        ControlError::Message(format!("read {method} from {}: {e}", path.display()))
     })?;
     if response.trim().is_empty() {
         return Err(ControlError::Message(format!(
@@ -327,7 +326,10 @@ where
                     continue;
                 }
             };
-            if stream.set_read_timeout(Some(Duration::from_secs(30))).is_err() {
+            if stream
+                .set_read_timeout(Some(Duration::from_secs(30)))
+                .is_err()
+            {
                 thread::sleep(Duration::from_millis(500));
                 continue;
             }
@@ -436,8 +438,7 @@ mod tests {
         );
         assert!(is_transient_io_error(&err));
         let wrapped = ControlError::Message(
-            "read initialize from /tmp/x: Resource temporarily unavailable (os error 35)"
-                .into(),
+            "read initialize from /tmp/x: Resource temporarily unavailable (os error 35)".into(),
         );
         assert!(is_transient_control_error(&wrapped));
     }
