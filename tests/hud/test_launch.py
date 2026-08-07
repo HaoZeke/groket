@@ -86,6 +86,29 @@ def test_ensure_hud_binary_rebuilds_when_stale(tmp_path: Path) -> None:
     mock_build.assert_called_once()
 
 
+def test_ensure_hud_binary_does_not_rebuild_installed_path_binary(tmp_path: Path) -> None:
+    checkout = tmp_path / "checkout" / "groket-hud"
+    source = checkout / "src-tauri" / "src" / "lib.rs"
+    source.parent.mkdir(parents=True)
+    source.write_text("// checkout\n", encoding="utf-8")
+    binary = tmp_path / "bin" / "groket-hud"
+    binary.parent.mkdir()
+    binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    binary.chmod(0o755)
+
+    with (
+        patch.object(launch_mod, "hud_checkout_dir", return_value=checkout),
+        patch.object(launch_mod, "find_hud_binary", return_value=binary),
+        patch.object(launch_mod, "build_hud_debug") as mock_build,
+        patch.dict(os.environ, {}, clear=False),
+    ):
+        os.environ.pop("GROKET_HUD_BIN", None)
+        out = launch_mod.ensure_hud_binary()
+
+    assert out == binary
+    mock_build.assert_not_called()
+
+
 def test_launch_tauri_hud_detaches_by_default(tmp_path: Path) -> None:
     """Default path spawns the binary in a new session and returns without waiting."""
     binary = tmp_path / "groket-hud"
