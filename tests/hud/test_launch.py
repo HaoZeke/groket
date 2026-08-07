@@ -106,6 +106,31 @@ def test_launch_tauri_hud_detaches_by_default(tmp_path: Path) -> None:
     assert kwargs.get("start_new_session") is True
 
 
+def test_launch_tauri_hud_passes_initial_selection_environment(tmp_path: Path) -> None:
+    binary = tmp_path / "groket-hud"
+    binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    binary.chmod(0o755)
+    sock = tmp_path / "control.sock"
+
+    with (
+        patch.object(launch_mod, "ensure_hud_binary", return_value=binary),
+        patch.object(launch_mod, "hud_process_running", return_value=False),
+        patch.object(launch_mod.subprocess, "Popen") as mock_popen,
+    ):
+        mock_popen.return_value.pid = 4242
+        code = launch_mod.launch_tauri_hud(
+            socket_path=sock,
+            extra_env={
+                "GROKET_HUD_INITIAL_SESSION": "/tmp/session-a",
+                "GROKET_HUD_INITIAL_PROMPT_INDEX": "7",
+            },
+        )
+    assert code == 0
+    env = mock_popen.call_args.kwargs["env"]
+    assert env["GROKET_HUD_INITIAL_SESSION"] == "/tmp/session-a"
+    assert env["GROKET_HUD_INITIAL_PROMPT_INDEX"] == "7"
+
+
 def test_launch_tauri_hud_skips_when_already_running(tmp_path: Path) -> None:
     binary = tmp_path / "groket-hud"
     binary.write_text("x", encoding="utf-8")

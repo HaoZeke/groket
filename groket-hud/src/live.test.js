@@ -11,9 +11,11 @@ import {
   mergeTimelineByIndex,
   overviewPaintFingerprint,
   patchListRowFromMeta,
+  selectedSessionIndex,
   sessionNeedsLivePoll,
   shouldAutoFollowTimeline,
   timelineSeekOffset,
+  turnEventIndexForPrompt,
 } from "./live.js";
 
 describe("isLiveStatus", () => {
@@ -114,6 +116,23 @@ describe("timelineSeekOffset", () => {
     assert.equal(timelineSeekOffset(100, 20), 80);
     assert.equal(timelineSeekOffset(5, 20), 0);
     assert.equal(timelineSeekOffset(-1, 20), 0);
+  });
+});
+
+describe("external session selection", () => {
+  it("finds the selected row and prompt event", () => {
+    const rows = [{ sessionId: "a" }, { sessionId: "target" }];
+    const overview = {
+      turns: {
+        turns: [
+          { promptIndex: 3, userEventIndex: 40 },
+          { promptIndex: 9, userEventIndex: 120 },
+        ],
+      },
+    };
+    assert.equal(selectedSessionIndex(rows, "target"), 1);
+    assert.equal(turnEventIndexForPrompt(overview, 9), 120);
+    assert.equal(turnEventIndexForPrompt(overview, 8), null);
   });
 });
 

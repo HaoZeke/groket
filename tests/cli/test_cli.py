@@ -156,6 +156,19 @@ def test_editor_vim_path_prints_packaged_neovim_runtime() -> None:
     assert (path / "plugin" / "groket.lua").is_file()
 
 
+def test_hud_forwards_initial_session_and_prompt(tmp_path: Path) -> None:
+    session = tmp_path / "session-hud-open"
+    session.mkdir()
+    with patch("groket.hud.app.run_hud", return_value=0) as run_hud:
+        result = runner.invoke(
+            app,
+            ["hud", str(session), "--prompt-index", "9", "--no-serve"],
+        )
+    assert result.exit_code == 0
+    assert run_hud.call_args.kwargs["initial_session"] == session
+    assert run_hud.call_args.kwargs["initial_prompt_index"] == 9
+
+
 class TestDoctorCommand:
     def test_doctor_json_no_tui(self, tmp_path: Path) -> None:
         from groket.diagnostics.self_test import CheckResult, SelfTestReport

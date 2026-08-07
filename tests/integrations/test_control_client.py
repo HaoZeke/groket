@@ -7,7 +7,7 @@ import json
 import tempfile
 from importlib import import_module
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -91,6 +91,21 @@ async def test_control_client_initialize_and_list(tmp_path: Path) -> None:
     finally:
         await server.close()
     assert await client_mod.control_socket_is_live(sock) is False
+
+
+@pytest.mark.asyncio
+async def test_control_client_session_open_forwards_prompt_index() -> None:
+    client_mod = import_module("groket.integrations.control_client")
+    client = client_mod.ControlClient(Path("/tmp/groket-test.sock"))
+    client.request = AsyncMock(return_value={"opened": True})
+
+    result = await client.session_open("/tmp/session-a", prompt_index=7)
+
+    assert result == {"opened": True}
+    client.request.assert_awaited_once_with(
+        "session/open",
+        {"session": "/tmp/session-a", "promptIndex": 7},
+    )
 
 
 @pytest.mark.asyncio
