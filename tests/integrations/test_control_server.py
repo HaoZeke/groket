@@ -457,8 +457,8 @@ async def test_control_server_drops_disconnected_clients_from_broadcasts(tmp_pat
             assert disconnected not in server._writers
         finally:
             disconnected.drain = original_drain  # type: ignore[method-assign]
-        writer.close()
-        await writer.wait_closed()
+            writer.close()
+            await writer.wait_closed()
     finally:
         await server.close()
 
