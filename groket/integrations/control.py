@@ -564,7 +564,10 @@ class ControlServer:
                 # notification sent earlier would use a framing the peer may
                 # not speak and desynchronize it permanently.
                 self._writers.add(writer)
-                await self._handle_line(message, writer)
+                try:
+                    await self._handle_line(message, writer)
+                except (BrokenPipeError, ConnectionResetError, ConnectionError, OSError):
+                    break
         finally:
             self._writers.discard(writer)
             self._writer_framing.pop(writer, None)
@@ -983,9 +986,4 @@ class ControlServer:
             writer.write(header + encoded)
         else:
             writer.write(encoded + b"\n")
-        try:
-            await writer.drain()
-        except (ConnectionResetError, BrokenPipeError, ConnectionError):
-            # One-shot clients (HUD) often close after the first line; do not
-            # escalate into an unhandled client_connected_cb exception.
-            return
+        await writer.drain()
