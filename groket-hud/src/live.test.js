@@ -8,6 +8,7 @@ import {
   eventFingerprint,
   hasOpenTurn,
   isLiveStatus,
+  latestSingleFlight,
   mergeTimelineByIndex,
   overviewPaintFingerprint,
   patchListRowFromMeta,
@@ -17,6 +18,37 @@ import {
   timelineSeekOffset,
   turnEventIndexForPrompt,
 } from "./live.js";
+
+describe("latestSingleFlight", () => {
+  it("serializes work and keeps the newest queued arguments", async () => {
+    const releases = [];
+    const calls = [];
+    let active = 0;
+    let maxActive = 0;
+    const run = latestSingleFlight(async (value) => {
+      calls.push(value);
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      await new Promise((resolve) => releases.push(resolve));
+      active -= 1;
+      return value;
+    });
+
+    const first = run("first");
+    const second = run("second");
+    const third = run("third");
+    assert.equal(first, second);
+    assert.equal(second, third);
+    assert.deepEqual(calls, ["first"]);
+
+    releases.shift()();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(calls, ["first", "third"]);
+    releases.shift()();
+    assert.equal(await first, "third");
+    assert.equal(maxActive, 1);
+  });
+});
 
 describe("isLiveStatus", () => {
   it("accepts control list labels", () => {
