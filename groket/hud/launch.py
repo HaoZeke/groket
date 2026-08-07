@@ -150,6 +150,11 @@ def ensure_hud_binary(*, rebuild: bool = False) -> Path | None:
     found = find_hud_binary()
     if checkout is None:
         return found
+    if found is not None:
+        try:
+            found.resolve().relative_to(checkout.resolve())
+        except ValueError:
+            return found
 
     need_build = rebuild or found is None or hud_binary_is_stale(found, checkout)
     if not need_build:
