@@ -179,6 +179,13 @@ def launch_tui(
 
 @app.command("hud")
 def cmd_hud(
+    session: Annotated[
+        Path | None,
+        typer.Argument(
+            help="Session path or id to select after the HUD connects.",
+            show_default=False,
+        ),
+    ] = None,
     path: Annotated[
         Path | None,
         typer.Option(
@@ -232,6 +239,14 @@ def cmd_hud(
             help="Stop any running groket-hud process, then start a new one.",
         ),
     ] = False,
+    prompt_index: Annotated[
+        int | None,
+        typer.Option(
+            "--prompt-index",
+            help="Prompt index to focus within SESSION.",
+            show_default=False,
+        ),
+    ] = None,
 ) -> None:
     """Desktop session palette (control client).
 
@@ -251,6 +266,8 @@ def cmd_hud(
         rebuild=rebuild,
         foreground=foreground,
         restart=restart,
+        initial_session=session,
+        initial_prompt_index=prompt_index,
     )
     raise typer.Exit(code)
 

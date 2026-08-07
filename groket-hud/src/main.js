@@ -12,9 +12,11 @@ import {
   mergeTimelineByIndex,
   overviewPaintFingerprint,
   patchListRowFromMeta,
+  selectedSessionIndex,
   sessionNeedsLivePoll,
   shouldAutoFollowTimeline,
   timelineSeekOffset,
+  turnEventIndexForPrompt,
 } from "./live.js";
 
 const { invoke } = window.__TAURI__.core;
@@ -1807,6 +1809,37 @@ async function refreshListFromServer(opts = {}) {
   }
 }
 
+async function selectSessionFromControl(sessionId, promptIndex = null) {
+  const sid = String(sessionId || "").trim();
+  if (!sid) return;
+
+  let index = selectedSessionIndex(allSessions, sid);
+  if (index < 0) {
+    const listed = rpcPayload(
+      await invoke("control_session_list", { query: sid, limit: 20 }),
+    );
+    const exact = sessionRowsFromList(listed).find(
+      (row) => String(row.sessionId || "") === sid,
+    );
+    if (exact) {
+      allSessions = [exact, ...allSessions.filter((row) => String(row.sessionId || "") !== sid)];
+    }
+  }
+
+  if (q.value) q.value = "";
+  applySessionFilter();
+  index = selectedSessionIndex(sessions, sid);
+  if (index < 0) {
+    setStatus(`Selected session not found: ${sid}`, true);
+    return;
+  }
+  active = index;
+  renderList();
+  await loadOverview(true);
+  const eventIndex = turnEventIndexForPrompt(overviewCache, promptIndex);
+  if (eventIndex != null) jumpToTimelineEvent(eventIndex);
+}
+
 /** Ignore blur→hide during show/focus handoff (macOS can emit a false blur). */
 let suppressBlurHide = false;
 let suppressBlurTimer = 0;
@@ -1919,6 +1952,14 @@ async function boot() {
     setStatus(String(e), true);
   }
   await refreshListFromServer();
+  const initial = await invoke("hud_initial_selection").catch(() => null);
+  if (initial?.session) {
+    await invoke("control_session_open", {
+      session: String(initial.session),
+      promptIndex: initial.promptIndex ?? null,
+    });
+    await selectSessionFromControl(initial.sessionId, initial.promptIndex ?? null);
+  }
   focusSearchField();
   paletteLive = true;
   armLivePoll(LIVE_POLL_MS);
@@ -2063,7 +2104,11 @@ listen("control-notify", (event) => {
   if (!payload || typeof payload !== "object") return;
   const method = String(payload.method || "");
   const params = payload.params && typeof payload.params === "object" ? payload.params : {};
-  if (method === "session/changed" || method === "session/selected") {
+  if (method === "session/selected") {
+    void selectSessionFromControl(params.sessionId, params.promptIndex ?? null);
+    return;
+  }
+  if (method === "session/changed") {
     void refreshListFromServer();
     const sid = String(params.sessionId || "").trim();
     if (sid && sid === overviewSid) {

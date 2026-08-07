@@ -1,6 +1,7 @@
 mod control;
 mod shortcut;
 
+use std::path::Path;
 use std::sync::Mutex;
 
 use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
@@ -8,6 +9,14 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 struct HudState {
     summon_label: String,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InitialSelection {
+    session: String,
+    session_id: String,
+    prompt_index: Option<u32>,
 }
 
 /// Run blocking Unix-socket RPC off the UI/main thread.
@@ -42,6 +51,14 @@ async fn control_session_list(
 #[tauri::command]
 async fn control_session_get(session: String) -> Result<serde_json::Value, control::ControlError> {
     control_blocking(move || control::session_get(&session)).await
+}
+
+#[tauri::command]
+async fn control_session_open(
+    session: String,
+    prompt_index: Option<u32>,
+) -> Result<serde_json::Value, control::ControlError> {
+    control_blocking(move || control::session_open(&session, prompt_index)).await
 }
 
 #[tauri::command]
@@ -90,6 +107,28 @@ fn hud_summon_shortcut(state: State<'_, Mutex<HudState>>) -> String {
         .unwrap_or_else(|_| shortcut::default_shortcut_label().to_string())
 }
 
+#[tauri::command]
+fn hud_initial_selection() -> Option<InitialSelection> {
+    let session = std::env::var("GROKET_HUD_INITIAL_SESSION").ok()?;
+    let session = session.trim().to_string();
+    if session.is_empty() {
+        return None;
+    }
+    let session_id = Path::new(&session)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(&session)
+        .to_string();
+    let prompt_index = std::env::var("GROKET_HUD_INITIAL_PROMPT_INDEX")
+        .ok()
+        .and_then(|raw| raw.trim().parse::<u32>().ok());
+    Some(InitialSelection {
+        session,
+        session_id,
+        prompt_index,
+    })
+}
+
 fn toggle_palette(app: &AppHandle) {
     if let Some(win) = app.get_webview_window("palette") {
         match win.is_visible() {
@@ -136,6 +175,7 @@ pub fn run() {
             control_initialize,
             control_session_list,
             control_session_get,
+            control_session_open,
             control_session_overview,
             control_session_turns,
             control_session_timeline,
@@ -143,6 +183,7 @@ pub fn run() {
             control_session_usage,
             control_socket_path,
             hud_summon_shortcut,
+            hud_initial_selection,
         ])
         .setup(move |app| {
             // Sol-like agent: no Dock icon, no ⌘Tab entry (macOS only).

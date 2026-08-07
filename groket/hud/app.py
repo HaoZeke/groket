@@ -23,6 +23,11 @@ async def _probe(socket_path: Path) -> None:
     await client.initialize()
 
 
+async def _select(socket_path: Path, session: Path, prompt_index: int | None) -> None:
+    client = ControlClient(socket_path, client_name="groket-hud-launcher")
+    await client.session_open(str(session), prompt_index=prompt_index)
+
+
 def run_hud(
     *,
     socket_path: Path | None = None,
@@ -32,6 +37,8 @@ def run_hud(
     rebuild: bool = False,
     foreground: bool = False,
     restart: bool = False,
+    initial_session: Path | None = None,
+    initial_prompt_index: int | None = None,
 ) -> int:
     """Ensure control owner is live, then launch the Tauri ``groket-hud`` binary.
 
@@ -80,13 +87,27 @@ def run_hud(
             )
             return 1
 
+    initial = Path(initial_session).expanduser() if initial_session is not None else None
+    extra_env: dict[str, str] = {}
+    if initial is not None:
+        extra_env["GROKET_HUD_INITIAL_SESSION"] = str(initial)
+        if initial_prompt_index is not None:
+            extra_env["GROKET_HUD_INITIAL_PROMPT_INDEX"] = str(initial_prompt_index)
+
     code = launch_tauri_hud(
         socket_path=sock,
+        extra_env=extra_env or None,
         dev=dev,
         rebuild=rebuild,
         foreground=foreground,
         restart=restart,
     )
+    if code == 0 and initial is not None:
+        try:
+            asyncio.run(_select(sock, initial, initial_prompt_index))
+        except Exception as exc:
+            sys.stderr.write(f"error: HUD session selection failed: {exc}\n")
+            return 1
     if code == 127:
         sys.stderr.write(
             "error: groket-hud binary not found.\n"

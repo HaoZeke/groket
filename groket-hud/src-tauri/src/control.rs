@@ -267,6 +267,13 @@ pub fn session_get(session: &str) -> Result<Value, ControlError> {
     request("session/get", json!({ "session": session }))
 }
 
+pub fn session_open(session: &str, prompt_index: Option<u32>) -> Result<Value, ControlError> {
+    request(
+        "session/open",
+        json!({ "session": session, "promptIndex": prompt_index }),
+    )
+}
+
 pub fn session_overview(session: &str) -> Result<Value, ControlError> {
     // Timeline rows are lazy-loaded via session/timeline (offset/limit).
     request("session/overview", json!({ "session": session }))

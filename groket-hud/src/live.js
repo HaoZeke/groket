@@ -72,6 +72,27 @@ export function timelineSeekOffset(focusIndex, pad = 20) {
   return Math.max(0, Math.floor(n) - Math.max(0, pad));
 }
 
+/** Return the exact row index for a daemon-selected session. */
+export function selectedSessionIndex(rows, sessionId) {
+  if (!Array.isArray(rows) || !sessionId) return -1;
+  const sid = String(sessionId);
+  return rows.findIndex((row) => row && String(row.sessionId || "") === sid);
+}
+
+/** Resolve a prompt selection to its user event for timeline focus. */
+export function turnEventIndexForPrompt(overview, promptIndex) {
+  if (promptIndex == null || !overview || typeof overview !== "object") return null;
+  const turns = overview.turns && typeof overview.turns === "object" ? overview.turns : {};
+  const rows = Array.isArray(turns.turns) ? turns.turns : [];
+  const prompt = Number(promptIndex);
+  const row = rows.find((item) => item && Number(item.promptIndex) === prompt);
+  if (!row) return null;
+  const index = row.userEventIndex ?? row.firstIndex;
+  if (index == null || index === "") return null;
+  const value = Number(index);
+  return Number.isFinite(value) ? value : null;
+}
+
 /**
  * Scroll offset that centers a child row inside an overflow scroller.
  *

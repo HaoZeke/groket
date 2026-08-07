@@ -296,6 +296,19 @@ class ControlClient:
         result = await self.request("session/get", {"session": session})
         return as_json_object(result) if isinstance(result, dict) else {}
 
+    async def session_open(
+        self,
+        session: str,
+        *,
+        prompt_index: int | None = None,
+    ) -> JsonObject:
+        """Select *session* and optionally a prompt across attached clients."""
+        result = await self.request(
+            "session/open",
+            {"session": session, "promptIndex": prompt_index},
+        )
+        return as_json_object(result) if isinstance(result, dict) else {}
+
     async def session_overview(
         self,
         session: str,
