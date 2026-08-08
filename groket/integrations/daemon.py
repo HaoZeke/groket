@@ -711,9 +711,7 @@ def _stop_pids(pids: list[int], *, timeout: float, label: str) -> int:
         except (ProcessLookupError, OSError):
             pass
     if _wait_pids_gone(pids, timeout=min(2.0, max(0.2, timeout))):
-        sys.stderr.write(
-            f"stopped {label} pid={','.join(str(p) for p in pids)} (SIGKILL)\n"
-        )
+        sys.stderr.write(f"stopped {label} pid={','.join(str(p) for p in pids)} (SIGKILL)\n")
         sys.stderr.flush()
         return 0
     sys.stderr.write(
