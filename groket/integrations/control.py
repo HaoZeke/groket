@@ -566,7 +566,7 @@ class ControlServer:
                 self._writers.add(writer)
                 try:
                     await self._handle_line(message, writer)
-                except (BrokenPipeError, ConnectionResetError, ConnectionError, OSError):
+                except ConnectionError:
                     break
         finally:
             self._writers.discard(writer)
