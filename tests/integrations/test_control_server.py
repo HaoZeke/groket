@@ -7,6 +7,7 @@ import json
 import tempfile
 from importlib import import_module
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -477,6 +478,23 @@ async def test_control_server_drops_disconnected_clients_from_broadcasts(tmp_pat
         await asyncio.sleep(0)
         loop.set_exception_handler(prior_handler)
     assert unhandled == []
+
+
+@pytest.mark.asyncio
+async def test_control_server_treats_broken_reader_as_disconnect(tmp_path: Path) -> None:
+    control = import_module("groket.integrations.control")
+    server = control.ControlServer(socket_path=tmp_path / "broken-reader.sock")
+    reader = MagicMock()
+    reader.at_eof.return_value = False
+    reader.readline = AsyncMock(side_effect=BrokenPipeError("peer closed"))
+    writer = MagicMock()
+    writer.is_closing.return_value = False
+    writer.wait_closed = AsyncMock()
+
+    await server._handle_client(reader, writer)
+
+    writer.close.assert_called_once_with()
+    writer.wait_closed.assert_awaited_once_with()
 
 
 @pytest.mark.asyncio
