@@ -239,6 +239,13 @@ def cmd_hud(
             help="Stop any running groket-hud process, then start a new one.",
         ),
     ] = False,
+    show: Annotated[
+        bool,
+        typer.Option(
+            "--show",
+            help="Show and focus the palette after launch or selection.",
+        ),
+    ] = False,
     prompt_index: Annotated[
         int | None,
         typer.Option(
@@ -266,6 +273,7 @@ def cmd_hud(
         rebuild=rebuild,
         foreground=foreground,
         restart=restart,
+        show=show,
         initial_session=session,
         initial_prompt_index=prompt_index,
     )

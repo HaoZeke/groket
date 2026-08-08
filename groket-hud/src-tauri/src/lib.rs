@@ -133,6 +133,17 @@ fn hud_initial_selection() -> Option<InitialSelection> {
     })
 }
 
+fn show_on_start() -> bool {
+    matches!(
+        std::env::var("GROKET_HUD_SHOW_ON_START")
+            .unwrap_or_default()
+            .trim()
+            .to_ascii_lowercase()
+            .as_str(),
+        "1" | "true" | "yes"
+    )
+}
+
 fn toggle_palette(app: &AppHandle) {
     if let Some(win) = app.get_webview_window("palette") {
         match win.is_visible() {
@@ -206,12 +217,21 @@ pub fn run() {
                 }
             }
             if let Some(win) = app.get_webview_window("palette") {
-                // Stay hidden until the global hotkey (or first explicit show).
-                let _ = win.hide();
+                if show_on_start() {
+                    show_palette(&win);
+                } else {
+                    // Stay hidden until the global hotkey or an explicit show request.
+                    let _ = win.hide();
+                }
             }
             // Persistent notify stream: session/changed, notes/changed, analysis/changed.
             let handle = app.handle().clone();
             let _ = control::spawn_notify_listener(move |method, params| {
+                if method == "hud/show" {
+                    if let Some(win) = handle.get_webview_window("palette") {
+                        show_palette(&win);
+                    }
+                }
                 let payload = serde_json::json!({ "method": method, "params": params });
                 let _ = handle.emit("control-notify", payload);
             });

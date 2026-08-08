@@ -309,6 +309,11 @@ class ControlClient:
         )
         return as_json_object(result) if isinstance(result, dict) else {}
 
+    async def hud_show(self) -> JsonObject:
+        """Request that attached HUD clients show their palette."""
+        result = await self.request("hud/show", {})
+        return as_json_object(result) if isinstance(result, dict) else {}
+
     async def session_overview(
         self,
         session: str,

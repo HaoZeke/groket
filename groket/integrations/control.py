@@ -53,6 +53,7 @@ CAPABILITIES = (
     "session/usage",
     "session/findings",
     "session/open",
+    "hud/show",
     "session/render",
     "notes/list",
     "notes/upsert",
@@ -862,6 +863,9 @@ class ControlServer:
                     )
                 )
             return {"opened": bool(opened)}
+        if method == "hud/show":
+            after_send.append(("hud/show", {}))
+            return {"shown": True}
         if method == "notes/list":
             ref = self._session_ref(params)
             return await self._access_call(ref, access.notes_list, ref)

@@ -28,6 +28,11 @@ async def _select(socket_path: Path, session: Path, prompt_index: int | None) ->
     await client.session_open(str(session), prompt_index=prompt_index)
 
 
+async def _show(socket_path: Path) -> None:
+    client = ControlClient(socket_path, client_name="groket-hud-launcher")
+    await client.hud_show()
+
+
 def run_hud(
     *,
     socket_path: Path | None = None,
@@ -37,6 +42,7 @@ def run_hud(
     rebuild: bool = False,
     foreground: bool = False,
     restart: bool = False,
+    show: bool = False,
     initial_session: Path | None = None,
     initial_prompt_index: int | None = None,
 ) -> int:
@@ -93,6 +99,8 @@ def run_hud(
         extra_env["GROKET_HUD_INITIAL_SESSION"] = str(initial)
         if initial_prompt_index is not None:
             extra_env["GROKET_HUD_INITIAL_PROMPT_INDEX"] = str(initial_prompt_index)
+    if show:
+        extra_env["GROKET_HUD_SHOW_ON_START"] = "1"
 
     code = launch_tauri_hud(
         socket_path=sock,
@@ -107,6 +115,12 @@ def run_hud(
             asyncio.run(_select(sock, initial, initial_prompt_index))
         except Exception as exc:
             sys.stderr.write(f"error: HUD session selection failed: {exc}\n")
+            return 1
+    if code == 0 and show:
+        try:
+            asyncio.run(_show(sock))
+        except Exception as exc:
+            sys.stderr.write(f"error: HUD show request failed: {exc}\n")
             return 1
     if code == 127:
         sys.stderr.write(
