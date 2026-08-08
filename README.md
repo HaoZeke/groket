@@ -173,7 +173,8 @@ Quitting the TUI does **not** stop the control owner.
 | `notes/list` / `notes/upsert` / `notes/delete` | Operator notes with revision checks |
 | `analysis/run` | Start background analysis on the owner (`force` optional) |
 | `analysis/status` | Poll job state (`idle` / `running` / `done` / `error`) |
-| notifications | `session/selected`, `session/changed`, `notes/changed`, `analysis/changed` |
+| `hud/show` | Show and focus every attached desktop HUD palette |
+| notifications | `hud/show`, `session/selected`, `session/changed`, `notes/changed`, `analysis/changed` |
 
 **Desktop HUD** (Sol-style palette — Tauri)
 
@@ -181,6 +182,7 @@ Quitting the TUI does **not** stop the control owner.
 groket serve -d               # or rely on client auto-start
 groket hud                    # cargo build (debug) if missing/stale
 groket hud /path/to/session --prompt-index 9
+groket hud /path/to/session --show  # select and reveal from an editor/script
 groket hud --dev              # npm run dev (hot reload)
 groket hud --rebuild          # force cargo build before launch
 # First time only if needed: cd groket-hud && npm install
@@ -204,6 +206,8 @@ timeline tail for running/awaiting turns (~2s) so a mid-turn Timeline tab
 updates without reopening the HUD. Passing a session path or id selects that
 row after the HUD connects; ``--prompt-index`` opens its matching timeline
 event. Selection broadcasts from the TUI and editors update the same HUD view.
+``--show`` sends an idempotent ``hud/show`` notification through the control
+owner, so an editor command reveals an existing palette as well as a new one.
 ``groket hud`` **detaches** like Sol
 (background agent); on macOS it uses accessory activation so it is **not** in
 the Dock or **⌘Tab**. Default hotkey **⌘⇧G** (macOS) / **Ctrl+Shift+G**

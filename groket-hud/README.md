@@ -19,6 +19,8 @@ Sol-style session **command palette** for the local groket control plane
 - **Agent process** (Sol-like): ``groket hud`` detaches; macOS accessory policy
   so the HUD is **not** in the Dock or **⌘Tab**
 - ``groket hud --restart`` stops any running agent, then starts a new one
+- ``groket hud SESSION --show`` selects a session and reveals the palette
+  through the shared control daemon, including when the HUD is already running
 - Starts hidden; on show: window + search field focus so typing works immediately
 - Hides on **Esc** or window blur; hotkey re-shows
 
