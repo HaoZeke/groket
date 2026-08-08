@@ -315,10 +315,11 @@ def _cli_env() -> dict[str, str]:
 
 
 def _scratch() -> Path:
+    default = Path(tempfile.gettempdir()) / "groket-daemon-tests"
     root = Path(
         os.environ.get(
             "GROK_GOAL_SCRATCH",
-            "/var/folders/7v/gqz9rq855hx6klrx5wtpm2dr0000gn/T/grok-goal-5364524c12e4/implementer",
+            str(default),
         )
     )
     root.mkdir(parents=True, exist_ok=True)
