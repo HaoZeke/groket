@@ -225,9 +225,11 @@ the Dock or **⌘Tab**. Default hotkey **⌘⇧G** (macOS) / **Ctrl+Shift+G**
 plus one key. Env ``GROKET_HUD_SHORTCUT`` wins over config. Restart the HUD
 after changing.) Focuses the search field on show; hides on **Esc** or when the
 window loses
-focus. Use ``groket hud --foreground`` to attach for debugging, or
-``--restart`` to replace a running agent. Client of the control plane only —
-quitting the agent leaves ``groket serve`` running. Build details:
+focus. Desktop tray hosts display one Groket icon while the HUD agent runs.
+Left-click shows the palette; the tray menu provides **Show HUD** and
+**Quit Groket HUD**. Quitting the HUD leaves ``groket serve`` running. Use
+``groket hud --foreground`` to attach for debugging, or
+``--restart`` to replace a running agent. Build details:
 ``groket-hud/README.md``.
 
 **List search contract.** ``session/list`` ``query`` is a **case-insensitive

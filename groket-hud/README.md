@@ -21,6 +21,8 @@ Sol-style session **command palette** for the local groket control plane
 - ``groket hud --restart`` stops any running agent, then starts a new one
 - ``groket hud SESSION --show`` selects a session and reveals the palette
   through the shared control daemon, including when the HUD is already running
+- System tray icon with left-click Show and a native **Show HUD** / **Quit
+  Groket HUD** menu; quitting the HUD does not stop the control daemon
 - Starts hidden; on show: window + search field focus so typing works immediately
 - Hides on **Esc** or window blur; hotkey re-shows
 
