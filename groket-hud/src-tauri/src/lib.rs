@@ -240,3 +240,26 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running groket-hud");
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{startup_show_requested, tray_menu_action, TrayAction};
+
+    #[test]
+    fn tray_menu_routes_show_and_quit_without_fallback_actions() {
+        assert_eq!(tray_menu_action("show-hud"), TrayAction::Show);
+        assert_eq!(tray_menu_action("quit-hud"), TrayAction::Quit);
+        assert_eq!(tray_menu_action("unknown"), TrayAction::Ignore);
+    }
+
+    #[test]
+    fn startup_show_accepts_only_explicit_truthy_values() {
+        for raw in ["1", "true", "TRUE", "yes", " Yes "] {
+            assert!(startup_show_requested(Some(raw)));
+        }
+        for raw in ["", "0", "false", "show"] {
+            assert!(!startup_show_requested(Some(raw)));
+        }
+        assert!(!startup_show_requested(None));
+    }
+}
