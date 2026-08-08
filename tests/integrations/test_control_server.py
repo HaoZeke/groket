@@ -441,6 +441,10 @@ async def test_control_server_drops_disconnected_clients_from_broadcasts(tmp_pat
     session_dir = tmp_path / "session-disconnected"
     _write_session(session_dir)
     server = control.ControlServer(socket_path=_short_sock("disconnected.sock"))
+    loop = asyncio.get_running_loop()
+    prior_handler = loop.get_exception_handler()
+    unhandled: list[dict[str, object]] = []
+    loop.set_exception_handler(lambda _loop, context: unhandled.append(context))
     await server.start()
     try:
         reader, writer = await asyncio.open_unix_connection(server.socket_path)
@@ -461,6 +465,9 @@ async def test_control_server_drops_disconnected_clients_from_broadcasts(tmp_pat
             await writer.wait_closed()
     finally:
         await server.close()
+        await asyncio.sleep(0)
+        loop.set_exception_handler(prior_handler)
+    assert unhandled == []
 
 
 @pytest.mark.asyncio
