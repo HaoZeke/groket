@@ -571,12 +571,13 @@ class ControlServer:
         finally:
             self._writers.discard(writer)
             self._writer_framing.pop(writer, None)
-            writer.close()
-            try:
-                await writer.wait_closed()
-            except (BrokenPipeError, ConnectionResetError, ConnectionError, OSError):
-                # Peer already gone; not an ownership fault.
-                pass
+            if not writer.is_closing():
+                writer.close()
+                try:
+                    await writer.wait_closed()
+                except (BrokenPipeError, ConnectionResetError, ConnectionError, OSError):
+                    # Peer already gone; not an ownership fault.
+                    pass
 
     async def _read_header_length(
         self,
