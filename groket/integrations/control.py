@@ -540,6 +540,8 @@ class ControlServer:
             while not reader.at_eof():
                 try:
                     first_line = await reader.readline()
+                except ConnectionError:
+                    break
                 except (ValueError, asyncio.LimitOverrunError):
                     await self._send_error(writer, None, -32600, "message exceeds size limit")
                     break
