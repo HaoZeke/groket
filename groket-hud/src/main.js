@@ -1964,9 +1964,18 @@ async function boot() {
     });
     await selectSessionFromControl(initial.sessionId, initial.promptIndex ?? null);
   }
-  focusSearchField();
-  paletteLive = true;
-  armLivePoll(LIVE_POLL_MS);
+  const showOnStart = await invoke("hud_show_on_start").catch(() => false);
+  if (showOnStart) {
+    armBlurSuppress(800);
+    await win.show();
+    await win.center();
+    await win.setFocus();
+    await onPaletteShown();
+  } else {
+    focusSearchField();
+    paletteLive = true;
+    armLivePoll(LIVE_POLL_MS);
+  }
 }
 
 let debounce = 0;

@@ -4,11 +4,22 @@ mod shortcut;
 use std::path::Path;
 use std::sync::Mutex;
 
-use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
+use tauri::{
+    menu::MenuBuilder,
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    AppHandle, Emitter, Manager, State, WebviewWindow,
+};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 struct HudState {
     summon_label: String,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum TrayAction {
+    Show,
+    Quit,
+    Ignore,
 }
 
 #[derive(serde::Serialize)]
@@ -133,15 +144,73 @@ fn hud_initial_selection() -> Option<InitialSelection> {
     })
 }
 
-fn show_on_start() -> bool {
+fn startup_show_requested(raw: Option<&str>) -> bool {
     matches!(
-        std::env::var("GROKET_HUD_SHOW_ON_START")
-            .unwrap_or_default()
+        raw.unwrap_or_default()
             .trim()
             .to_ascii_lowercase()
             .as_str(),
         "1" | "true" | "yes"
     )
+}
+
+fn show_on_start() -> bool {
+    startup_show_requested(std::env::var("GROKET_HUD_SHOW_ON_START").ok().as_deref())
+}
+
+#[tauri::command]
+fn hud_show_on_start() -> bool {
+    show_on_start()
+}
+
+fn tray_menu_action(id: &str) -> TrayAction {
+    match id {
+        "show-hud" => TrayAction::Show,
+        "quit-hud" => TrayAction::Quit,
+        _ => TrayAction::Ignore,
+    }
+}
+
+fn perform_tray_action(app: &AppHandle, action: TrayAction) {
+    match action {
+        TrayAction::Show => {
+            if let Some(win) = app.get_webview_window("palette") {
+                show_palette(&win);
+            }
+        }
+        TrayAction::Quit => app.exit(0),
+        TrayAction::Ignore => {}
+    }
+}
+
+fn install_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    let menu = MenuBuilder::new(app)
+        .text("show-hud", "Show HUD")
+        .text("quit-hud", "Quit Groket HUD")
+        .build()?;
+    let icon = app.default_window_icon().cloned().ok_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::NotFound, "packaged Groket tray icon")
+    })?;
+    TrayIconBuilder::with_id("groket-hud")
+        .icon(icon)
+        .tooltip("Groket HUD")
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| {
+            perform_tray_action(app, tray_menu_action(event.id.as_ref()));
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                perform_tray_action(tray.app_handle(), TrayAction::Show);
+            }
+        })
+        .build(app)?;
+    Ok(())
 }
 
 fn toggle_palette(app: &AppHandle) {
@@ -199,6 +268,7 @@ pub fn run() {
             control_socket_path,
             hud_summon_shortcut,
             hud_initial_selection,
+            hud_show_on_start,
         ])
         .setup(move |app| {
             // Sol-like agent: no Dock icon, no ⌘Tab entry (macOS only).
@@ -217,13 +287,10 @@ pub fn run() {
                 }
             }
             if let Some(win) = app.get_webview_window("palette") {
-                if show_on_start() {
-                    show_palette(&win);
-                } else {
-                    // Stay hidden until the global hotkey or an explicit show request.
-                    let _ = win.hide();
-                }
+                // The page-ready path handles startup visibility after listeners exist.
+                let _ = win.hide();
             }
+            install_tray(app)?;
             // Persistent notify stream: session/changed, notes/changed, analysis/changed.
             let handle = app.handle().clone();
             let _ = control::spawn_notify_listener(move |method, params| {
