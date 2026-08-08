@@ -109,6 +109,18 @@ async def test_control_client_session_open_forwards_prompt_index() -> None:
 
 
 @pytest.mark.asyncio
+async def test_control_client_hud_show_requests_visible_palette() -> None:
+    client_mod = import_module("groket.integrations.control_client")
+    client = client_mod.ControlClient(Path("/tmp/groket-test.sock"))
+    client.request = AsyncMock(return_value={"shown": True})
+
+    result = await client.hud_show()
+
+    assert result == {"shown": True}
+    client.request.assert_awaited_once_with("hud/show", {})
+
+
+@pytest.mark.asyncio
 async def test_control_client_session_list_beyond_default_stream_limit(
     tmp_path: Path,
 ) -> None:

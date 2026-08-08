@@ -112,3 +112,44 @@ async def test_session_open_one_shot_client_disconnects_cleanly(tmp_path: Path) 
         await asyncio.sleep(0)
         loop.set_exception_handler(prior_handler)
     assert unhandled == []
+
+
+@pytest.mark.asyncio
+async def test_hud_show_notifies_attached_clients(tmp_path: Path) -> None:
+    daemon = import_module("groket.integrations.daemon")
+    work = tmp_path / "work"
+    traces = work / "runs" / "traces"
+    sock = _short_sock("hud-show.sock")
+    server = daemon.build_domain_control_server(
+        socket_path=sock,
+        work_dir=work,
+        traces_path=traces,
+    )
+    await server.start()
+    try:
+        reader, writer = await asyncio.open_unix_connection(sock)
+        writer.write(
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "initialize",
+                    "params": {"protocolVersion": 1},
+                }
+            ).encode()
+            + b"\n"
+        )
+        await writer.drain()
+        await asyncio.wait_for(reader.readline(), timeout=3)
+
+        client = ControlClient(sock, client_name="hud-show-test")
+        result = await client.hud_show()
+        assert result == {"shown": True}
+
+        notify = json.loads(await asyncio.wait_for(reader.readline(), timeout=3))
+        assert notify["method"] == "hud/show"
+        assert notify["params"] == {}
+        writer.close()
+        await writer.wait_closed()
+    finally:
+        await server.close()

@@ -169,6 +169,15 @@ def test_hud_forwards_initial_session_and_prompt(tmp_path: Path) -> None:
     assert run_hud.call_args.kwargs["initial_prompt_index"] == 9
 
 
+def test_hud_show_requests_visible_palette(tmp_path: Path) -> None:
+    session = tmp_path / "session-hud-show"
+    session.mkdir()
+    with patch("groket.hud.app.run_hud", return_value=0) as run_hud:
+        result = runner.invoke(app, ["hud", str(session), "--show", "--no-serve"])
+    assert result.exit_code == 0
+    assert run_hud.call_args.kwargs["show"] is True
+
+
 class TestDoctorCommand:
     def test_doctor_json_no_tui(self, tmp_path: Path) -> None:
         from groket.diagnostics.self_test import CheckResult, SelfTestReport
