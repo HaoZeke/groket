@@ -451,11 +451,18 @@ async def test_control_server_drops_disconnected_clients_from_broadcasts(tmp_pat
         await _request(reader, writer, 1, "initialize", {"protocolVersion": 1})
         disconnected = next(iter(server._writers))
         original_drain = disconnected.drain
+        reawaited = False
 
         async def broken_drain() -> None:
             raise BrokenPipeError("peer closed")
 
+        async def broken_wait_closed() -> None:
+            nonlocal reawaited
+            reawaited = True
+            raise BrokenPipeError("closed transport")
+
         disconnected.drain = broken_drain  # type: ignore[method-assign]
+        disconnected.wait_closed = broken_wait_closed  # type: ignore[method-assign]
         try:
             await server.publish_session_changed(session_dir)
             assert disconnected not in server._writers
@@ -463,6 +470,8 @@ async def test_control_server_drops_disconnected_clients_from_broadcasts(tmp_pat
             disconnected.drain = original_drain  # type: ignore[method-assign]
             writer.close()
             await writer.wait_closed()
+        await asyncio.sleep(0.05)
+        assert not reawaited
     finally:
         await server.close()
         await asyncio.sleep(0)
