@@ -217,6 +217,37 @@ time.sleep(30)
             proc.wait(timeout=2)
 
 
+def test_stop_waits_for_process_exit_after_socket_closes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    daemon = import_module("groket.integrations.daemon")
+    sock = tmp_path / "released-socket.sock"
+    pid = 4242
+    killed = False
+    signals: list[int] = []
+
+    monkeypatch.setattr(daemon, "read_control_pid", lambda _sock: pid)
+    monkeypatch.setattr(daemon, "control_socket_accepts", lambda _sock: False)
+    monkeypatch.setattr(daemon, "pid_is_alive", lambda _pid: not killed)
+    monkeypatch.setattr(daemon, "_unlink_stale_socket_only", lambda _sock: True)
+    monkeypatch.setattr(daemon, "remove_control_pid", lambda _sock: None)
+
+    def signal_owner(_pid: int, sig: int) -> None:
+        nonlocal killed
+        signals.append(sig)
+        if sig == signal.SIGKILL:
+            killed = True
+
+    monkeypatch.setattr(daemon.os, "killpg", signal_owner)
+
+    code = daemon.stop_control_daemon(sock, timeout=0.1)
+
+    assert code == 0
+    assert signals == [signal.SIGTERM, signal.SIGKILL]
+    assert killed
+
+
 @pytest.mark.asyncio
 async def test_stop_does_not_unlink_live_socket_without_pid() -> None:
     """TUI-as-owner (no pid file): serve stop must not destroy the public path."""
