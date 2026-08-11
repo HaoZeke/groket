@@ -230,7 +230,21 @@ recipes, or Docker. ``groket hud`` **detaches** like Sol
 
 (``+``-separated modifiers: ``Cmd``/``Super``, ``Control``, ``Alt``, ``Shift``,
 plus one key. Env ``GROKET_HUD_SHORTCUT`` wins over config. Restart the HUD
-after changing.) Focuses the search field on show; hides on **Esc** or when the
+after changing.)
+
+While the HUD process is running it posts desktop notifications when a
+session becomes awaiting, completes, is cancelled, or fails, and when
+analysis finishes. Linux uses the freedesktop Notifications bus (dunst,
+mako, fnott, swaync). macOS uses Notification Center. Windows uses
+toasts. Disable with ``GROKET_HUD_NOTIFY=0`` or::
+
+```json
+{
+  "hud": {
+    "desktop_notifications": false
+  }
+}
+``` Focuses the search field on show; hides on **Esc** or when the
 window loses
 focus. Use ``groket hud --foreground`` to attach for debugging, or
 ``--restart`` to replace a running agent. Client of the control plane only —

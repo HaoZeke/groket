@@ -15,7 +15,7 @@ use iced::{
 use serde_json::{json, Value};
 
 use crate::control::{self, ControlError};
-use crate::format::{control_down_message, new_note_id};
+use crate::format::{control_down_message, list_status_label, new_note_id};
 use crate::fuzzy::fuzzy_filter_indices;
 use crate::live::{
     card_marks_from_overview, clamp_scroll, filter_timeline_indices, index_outside_visible,
@@ -163,6 +163,7 @@ pub struct Hud {
     tl_filter: Vec<usize>,
     turn_marks: std::collections::HashMap<i64, CardMark>,
     event_marks: std::collections::HashMap<i64, CardMark>,
+    seen_status: std::collections::HashMap<String, String>,
 }
 
 impl Default for Hud {
@@ -216,6 +217,7 @@ impl Default for Hud {
             tl_filter: vec![],
             turn_marks: std::collections::HashMap::new(),
             event_marks: std::collections::HashMap::new(),
+            seen_status: std::collections::HashMap::new(),
         }
     }
 }
@@ -616,6 +618,7 @@ impl Hud {
                         };
                         patch_list_row_from_meta(&mut self.all_sessions, &sid, &ov.meta);
                         patch_list_row_from_meta(&mut self.sessions, &sid, &ov.meta);
+                        self.emit_session_notices();
                         if !quiet {
                             self.status = format!("{sid} · {}", ov.meta.status);
                         }
@@ -1050,6 +1053,7 @@ impl Hud {
                 self.all_sessions =
                     patch_catalog_delta(&self.all_sessions, incoming, &page.removed);
                 self.rerank_visible();
+                self.emit_session_notices();
                 self.mark_up();
                 if !quiet {
                     self.status = format!("{} sessions · ready", self.all_sessions.len());
@@ -1078,6 +1082,7 @@ impl Hud {
             }
             self.all_sessions = patch_catalog_delta(&self.all_sessions, incoming, &[]);
             self.rerank_visible();
+            self.emit_session_notices();
             self.mark_up();
             return;
         }
@@ -1087,6 +1092,7 @@ impl Hud {
         }
         self.all_sessions = rows;
         self.rerank_visible();
+        self.emit_session_notices();
         self.mark_up();
         if !quiet {
             if self.sessions().is_empty() {
@@ -1100,6 +1106,24 @@ impl Hud {
             } else {
                 self.status = format!("{} sessions · ready", self.all_sessions.len());
             }
+        }
+    }
+
+    fn emit_session_notices(&mut self) {
+        let seed = self.seen_status.is_empty();
+        let rows: Vec<(String, String, String)> = self
+            .all_sessions
+            .iter()
+            .map(|r| {
+                (
+                    r.session_id.clone(),
+                    r.display_title().to_string(),
+                    list_status_label(&r.status, &r.outcome),
+                )
+            })
+            .collect();
+        for notice in crate::desktop::notices_from_rows(&mut self.seen_status, &rows, seed) {
+            crate::desktop::post(notice);
         }
     }
 
@@ -1591,6 +1615,24 @@ impl Hud {
             crate::tray::action_from_notify(method) == Some(crate::tray::TrayAction::Show)
         }) {
             cmds.push(self.show_palette());
+        }
+        for (method, params) in &notifies {
+            if method != "analysis/changed" {
+                continue;
+            }
+            let sid = params
+                .get("sessionId")
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            let title = self
+                .all_sessions
+                .iter()
+                .find(|r| r.session_id == sid)
+                .map(|r| r.display_title().to_string())
+                .unwrap_or_default();
+            if let Some(n) = crate::desktop::analysis_from_params(params, &title) {
+                crate::desktop::post(n);
+            }
         }
         let selected = self.selected_sid().unwrap_or_default();
         let live = session_needs_live_poll(

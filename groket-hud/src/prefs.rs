@@ -20,6 +20,19 @@ fn read_value() -> Value {
     serde_json::from_str(&text).unwrap_or_else(|_| json!({}))
 }
 
+/// Desktop notifications (dunst / mako / Notification Center / toasts).
+///
+/// Default on. ``hud.desktop_notifications`` in config.json overrides.
+pub fn desktop_notifications() -> bool {
+    match read_value()
+        .get("hud")
+        .and_then(|h| h.get("desktop_notifications"))
+    {
+        Some(Value::Bool(v)) => *v,
+        _ => true,
+    }
+}
+
 /// TUI theme name from config, or ``textual-dark``.
 pub fn theme_name() -> String {
     read_value()
