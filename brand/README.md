@@ -22,6 +22,7 @@ SVG drawn by `build.py` — not a tracing of the still.
 | HUD search bar (colour) | `png/groket-mark.png` |
 | HUD search bar (dark) | `png/groket-mark-reverse.png` |
 | Favicon (square tab) | `png/groket-favicon-32.png` |
+| HUD system tray | `png/groket-favicon-32.png` |
 | TUI header | wordmark + folders when wide + activity |
 | TUI help | three equal slats with status tips |
 | CLI (3 rows) | `small.txt` |

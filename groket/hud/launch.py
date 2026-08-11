@@ -333,7 +333,8 @@ def launch_tauri_hud(
         sys.stderr.write(f"error: could not launch {binary}: {exc}\n")
         return 1
     sys.stderr.write(
-        f"groket hud: background pid {child.pid} (summon: {chord_hint}; not in Dock or Cmd+Tab)\n"
+        f"groket hud: background pid {child.pid} "
+        f"(summon: {chord_hint}; tray Show HUD; not in Dock or Cmd+Tab)\n"
     )
     return 0
 

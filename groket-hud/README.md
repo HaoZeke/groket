@@ -31,6 +31,10 @@ Sol-style session **command palette** for the local groket control plane
   override with ``~/.groket/config.json`` ``hud.global_shortcut`` or env
   ``GROKET_HUD_SHORTCUT``
 - ``groket hud`` detaches; ``groket hud --restart`` replaces a running agent
+- Linux StatusNotifier tray (Swaybar, Waybar, and other SNI hosts): left-click
+  or **Show HUD** reveals and focuses the palette. **Quit Groket HUD** exits
+  the HUD process only; ``groket serve`` stays up. Escape hides the overlay
+  and leaves the tray item in place. A missing tray host fails Linux startup.
 - Overlay: hides on **Esc** or the summon hotkey. It is a floating card
   (macOS system dialog / Linux override-redirect) so a tiler does not
   insert it. Decorated window: stays open until you close it; the summon
@@ -74,3 +78,4 @@ window loop, and the Unix socket client are omitted from that floor).
 | ``GROKET_HUD_DEV`` | Same as ``--dev`` |
 | ``GROKET_HUD_DEBUG`` | Same as ``--debug`` |
 | ``GROKET_HUD_LOG`` | Append-only error log path (default ``~/.groket/hud.log``) |
+| ``GROKET_HUD_SHOW_ON_START`` | Show and focus the palette when the process starts (``1`` / ``true`` / ``yes``) |
