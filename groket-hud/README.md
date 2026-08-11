@@ -42,6 +42,8 @@ Sol-style session **command palette** for the local groket control plane
   (yabai, i3, sway) tiles it and a stacking desktop just shows it.
   Closing the window does not stop the HUD process. Tiling shells unfocus
   a new overlay on map, so blur does not hide it.
+  On Wayland (Sway) the compositor owns focus: the HUD does not X11-grab
+  or remap an already-visible overlay (tray Show is idempotent).
 
 ## Prerequisites
 

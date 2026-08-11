@@ -233,6 +233,11 @@ fn with_hud_icon(mut win: window::Settings) -> window::Settings {
     win
 }
 
+/// Overlay is already the mapped palette: do not remap, resize, or refetch.
+pub fn overlay_already_mapped(visible: bool, window_mode: bool, has_window: bool) -> bool {
+    visible && !window_mode && has_window
+}
+
 pub fn palette_window_settings() -> window::Settings {
     let mut win = with_hud_icon(window::Settings {
         size: Size::new(HUD_W, HUD_H),
@@ -1445,6 +1450,9 @@ impl Hud {
     }
 
     fn show_palette(&mut self) -> Task<Message> {
+        if overlay_already_mapped(self.visible, self.window_mode, self.window_id.is_some()) {
+            return self.focus_overlay();
+        }
         self.window_mode = false;
         self.visible = true;
         self.palette_live = true;
@@ -1489,6 +1497,10 @@ impl Hud {
         };
         #[cfg(target_os = "linux")]
         {
+            if !crate::x11focus::x11_grab_needed() {
+                let _ = attempt;
+                return window::gain_focus(id);
+            }
             Task::batch([
                 window::gain_focus(id),
                 window::get_raw_id::<Message>(id)
@@ -1971,6 +1983,30 @@ mod tests {
         assert!(!hud.window_mode());
         assert!(!hud.visible);
         assert!(hud.window_id.is_none());
+    }
+
+    #[test]
+    fn overlay_already_mapped_skips_remap() {
+        assert!(overlay_already_mapped(true, false, true));
+        assert!(!overlay_already_mapped(false, false, true));
+        assert!(!overlay_already_mapped(true, true, true));
+        assert!(!overlay_already_mapped(true, false, false));
+    }
+
+    #[test]
+    fn tray_show_on_visible_overlay_does_not_clear_window() {
+        let id = window::Id::unique();
+        let mut hud = Hud {
+            visible: true,
+            palette_live: true,
+            window_mode: false,
+            window_id: Some(id),
+            ..Hud::default()
+        };
+        let _ = hud.on_tray(crate::tray::TrayAction::Show);
+        assert!(hud.visible);
+        assert!(!hud.window_mode);
+        assert_eq!(hud.window_id, Some(id));
     }
 
     #[test]
