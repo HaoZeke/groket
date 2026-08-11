@@ -97,6 +97,7 @@ pub enum Message {
         attempt: u8,
     },
     Hide,
+    Tray(crate::tray::TrayAction),
     MdLink(String),
     ListScroll {
         y: f32,
@@ -149,6 +150,7 @@ pub struct Hud {
     tl_search_id: text_input::Id,
     theme_name: String,
     _hotkeys: Option<GlobalHotKeyManager>,
+    _tray: Option<crate::tray::HudTray>,
     notify_q: Arc<Mutex<VecDeque<(String, Value)>>>,
     window_id: Option<window::Id>,
     catalog_revision: i64,
@@ -198,6 +200,7 @@ impl Default for Hud {
             tl_search_id: text_input::Id::new("tl-search"),
             theme_name: prefs::theme_name(),
             _hotkeys: None,
+            _tray: None,
             notify_q: Arc::new(Mutex::new(VecDeque::new())),
             catalog_revision: 0,
             window_id: None,
@@ -315,6 +318,21 @@ impl Hud {
                 eprintln!("groket-hud: {msg}");
             }
         }
+        match crate::tray::install() {
+            Ok(tray) => {
+                eprintln!("groket-hud: tray ready");
+                hud._tray = Some(tray);
+            }
+            Err(err) => {
+                let msg = format!("tray: {err}");
+                crate::log::error(&msg);
+                eprintln!("groket-hud: {msg}");
+                #[cfg(target_os = "linux")]
+                {
+                    std::process::exit(1);
+                }
+            }
+        }
         let q = hud.notify_q.clone();
         let _ = control::spawn_notify_listener(move |method, params| {
             if let Ok(mut g) = q.lock() {
@@ -326,14 +344,17 @@ impl Hud {
         });
         let (id, open) = window::open(palette_window_settings());
         hud.window_id = Some(id);
-        let boot = Task::batch([
+        let mut boot = vec![
             open.map(|id| Message::WindowId(Some(id))),
             Task::perform(rpc(control::initialize), |r| {
                 Message::Inited(r.map(|_| String::new()))
             }),
             fetch_list(false, 0),
-        ]);
-        (hud, boot)
+        ];
+        if crate::tray::show_on_start() {
+            boot.push(hud.show_palette());
+        }
+        (hud, Task::batch(boot))
     }
 
     fn theme(&self, _window: window::Id) -> Theme {
@@ -345,6 +366,7 @@ impl Hud {
             event::listen_with(interesting_hud_event),
             hotkey_subscription(),
             notify_subscription(),
+            tray_subscription(),
             keyboard::on_key_press(|key, _mods| match key {
                 Key::Named(Named::Escape) => Some(Message::Hide),
                 _ => None,
@@ -736,6 +758,7 @@ impl Hud {
             }
             Message::X11Focus { xid, attempt } => self.after_x11_focus(xid, attempt),
             Message::Hide => self.hide_palette(),
+            Message::Tray(action) => self.on_tray(action),
             Message::MdLink(url) => {
                 self.status = url;
                 self.status_err = false;
@@ -1476,6 +1499,13 @@ impl Hud {
         }
     }
 
+    fn on_tray(&mut self, action: crate::tray::TrayAction) -> Task<Message> {
+        match action {
+            crate::tray::TrayAction::Show => self.show_palette(),
+            crate::tray::TrayAction::Quit => iced::exit(),
+        }
+    }
+
     fn on_tick(&mut self) -> Task<Message> {
         self.sync_theme();
         if let Some(until) = self.note_delete_until {
@@ -1502,6 +1532,11 @@ impl Hud {
                 (method.clone(), sid)
             })
             .collect();
+        if notify_pairs.iter().any(|(method, _)| {
+            crate::tray::action_from_notify(method) == Some(crate::tray::TrayAction::Show)
+        }) {
+            cmds.push(self.show_palette());
+        }
         let selected = self.selected_sid().unwrap_or_default();
         let live = session_needs_live_poll(
             &self.selected_status(),
@@ -1728,6 +1763,30 @@ fn hotkey_subscription() -> Subscription<Message> {
     Subscription::run(hotkey_stream)
 }
 
+fn tray_subscription() -> Subscription<Message> {
+    Subscription::run(tray_stream)
+}
+
+fn tray_stream() -> impl iced::futures::Stream<Item = Message> {
+    iced::stream::channel(8, |mut output| async move {
+        loop {
+            let action = tokio::task::spawn_blocking(crate::tray::recv_action)
+                .await
+                .ok()
+                .and_then(Result::ok);
+            let Some(action) = action else {
+                break;
+            };
+            if iced::futures::SinkExt::send(&mut output, Message::Tray(action))
+                .await
+                .is_err()
+            {
+                break;
+            }
+        }
+    })
+}
+
 fn hotkey_stream() -> impl iced::futures::Stream<Item = Message> {
     iced::stream::channel(8, |mut output| async move {
         loop {
@@ -1816,6 +1875,20 @@ mod tests {
         assert!(!hud.window_mode());
         assert!(!hud.visible);
         assert!(hud.window_id.is_none());
+    }
+
+    #[test]
+    fn tray_show_reveals_hidden_palette() {
+        let mut hud = Hud {
+            visible: false,
+            palette_live: false,
+            window_mode: true,
+            ..Hud::default()
+        };
+        let _ = hud.on_tray(crate::tray::TrayAction::Show);
+        assert!(hud.visible);
+        assert!(hud.palette_live);
+        assert!(!hud.window_mode);
     }
 
     #[test]

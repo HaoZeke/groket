@@ -15,6 +15,7 @@ pub mod scroll;
 pub mod shortcut;
 pub mod style;
 pub mod theme;
+pub mod tray;
 pub mod typo;
 pub mod view;
 pub mod wire;

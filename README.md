@@ -208,7 +208,10 @@ See ``groket-hud/README.md`` for the full prerequisite list.
 Floating, frameless, always-on-top command palette (search sessions; overview,
 turns, timeline, findings, notes). Launch is always the overlay; the pop-out icon in the
 search bar opens a decorated desktop window. Close that window to keep the
-HUD process running; the summon hotkey brings the overlay back. Create, edit,
+HUD process running; the summon hotkey or the tray **Show HUD** item brings
+the overlay back. Linux registers a StatusNotifier tray icon (Swaybar / Waybar).
+Left-click shows the palette; **Quit Groket HUD** exits the HUD only.
+Create, edit,
 and delete operator notes the
 same way as the TUI. While the palette is open, a **live poll** re-reads
 overview and the timeline tail for running/awaiting turns (~2s) so a mid-turn
@@ -231,8 +234,8 @@ after changing.) Focuses the search field on show; hides on **Esc** or when the
 window loses
 focus. Use ``groket hud --foreground`` to attach for debugging, or
 ``--restart`` to replace a running agent. Client of the control plane only —
-quitting the agent leaves ``groket serve`` running. Build details:
-``groket-hud/README.md``.
+quitting the agent (tray **Quit Groket HUD**, or killing the process) leaves
+``groket serve`` running. Build details: ``groket-hud/README.md``.
 
 **List search contract.** ``session/list`` ``query`` is a **case-insensitive
 substring** over id/title/label/model/status/outcome/origin (not the filesystem
