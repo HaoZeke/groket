@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
+from groket.session.turn_gate import read_turn_gate_status, session_awaits_follow_up
 from groket.ui.app import TraceEvalApp
 from groket.ui.screens.runner import RunnerScreen
 from textual.widgets import DataTable
@@ -295,10 +296,30 @@ async def test_colemak_leader_follow_and_done(
             description="follow-up dismissed",
         )
         table.focus()
+        table.move_cursor(row=0, animate=False)
+        sess = traces / "pilot-keymap-1"
+        await wait_until(
+            pilot,
+            lambda: session_awaits_follow_up(sess) and bool(app._awaiting_session_targets()),
+            description="still awaiting after dismissed follow-up",
+        )
+        await pilot.press("f24")
+        await pilot.pause()
+        assert not any(type(s).__name__ == "InteractiveSessionsModal" for s in app.screen_stack)
+        assert session_awaits_follow_up(sess)
         await pilot.press("semicolon")
         await wait_until(pilot, lambda: app._leader_armed, description="leader armed for done")
         await pilot.press("e")
-        await wait_until(pilot, lambda: not app._leader_armed, description="leader+e disarms")
+        await wait_until(
+            pilot,
+            lambda: (
+                session_awaits_follow_up(sess) is False
+                or read_turn_gate_status(sess).get("state") == "done"
+            ),
+            description="leader+e marks the session done",
+        )
+        assert not app._leader_armed
+        assert session_awaits_follow_up(sess) is False
 
 
 @pytest.mark.asyncio

@@ -247,8 +247,27 @@ leader_timeout_ms = 800
     assert keymap.lookup_sequence("e") == "session.done"
     mapped = textual_keymap(keymap)
     assert mapped["list.down"] == "n"
-    assert mapped["session.follow"] == "f24"
-    assert mapped["session.done"] == "f24"
+    assert mapped["session.follow"].startswith("ctrl+shift+alt+f")
+    assert mapped["session.done"].startswith("ctrl+shift+alt+f")
+    assert mapped["session.follow"] != mapped["session.done"]
+    assert mapped["session.follow"] != "f24"
+    assert mapped["session.done"] != "f24"
+
+
+def test_list_nav_sequence_is_refused(tmp_path: Path, monkeypatch) -> None:
+    path = _write(
+        tmp_path / "keys.toml",
+        """
+leader = ";"
+[home]
+"list.down" = "leader+j"
+""",
+    )
+    monkeypatch.setenv(KEYS_ENV, str(path))
+    keymap = load_keymap()
+    assert not keymap.ok
+    assert keymap.binding("list.down").chord == "j"
+    assert any(err.kind is OverlayErrorKind.INVALID_VALUE for err in keymap.errors)
 
 
 def test_leader_sequence_without_leader_refuses(tmp_path: Path, monkeypatch) -> None:

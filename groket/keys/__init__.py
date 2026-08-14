@@ -16,7 +16,6 @@ from .catalog import (
 from .overlay import (
     DEFAULT_LEADER_TIMEOUT_MS,
     KEYS_ENV,
-    SEQUENCE_UNBOUND,
     Keymap,
     OverlayDocument,
     OverlayError,
@@ -33,6 +32,7 @@ from .overlay import (
     parse_overlay,
     resolve_keys_path,
     sequence_suffix,
+    sequence_unbound_slot,
     textual_keymap,
 )
 
@@ -42,7 +42,6 @@ __all__ = [
     "DEFAULT_LEADER_TIMEOUT_MS",
     "KEYS_ENV",
     "RESERVED_KEYS",
-    "SEQUENCE_UNBOUND",
     "ActionScope",
     "ActionSurface",
     "KeyAction",
@@ -65,5 +64,6 @@ __all__ = [
     "parse_overlay",
     "resolve_keys_path",
     "sequence_suffix",
+    "sequence_unbound_slot",
     "textual_keymap",
 ]

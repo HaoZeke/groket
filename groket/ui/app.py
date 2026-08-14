@@ -679,11 +679,14 @@ class TraceEvalApp(App):
         return normalize_chord(key) == normalize_chord(leader)
 
     async def _run_binding_id(self, action_id: str) -> None:
-        for _key, active in self.active_bindings.items():
-            binding = getattr(active, "binding", None)
-            if binding is not None and getattr(binding, "id", None) == action_id:
-                await self.run_action(binding.action)
-                return
+        """Dispatch *action_id* from the screen chain (home vs browser action)."""
+        chain = getattr(self.screen, "_modal_binding_chain", ())
+        for namespace, bindings in chain:
+            for _key, binding in bindings:
+                if getattr(binding, "id", None) != action_id:
+                    continue
+                if await self.run_action(binding.action, namespace):
+                    return
 
     async def _handle_leader_key(self, event: object) -> bool:
         """Consume a leader prefix or ``leader+X`` dispatch. True when handled."""

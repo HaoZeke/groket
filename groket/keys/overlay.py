@@ -27,8 +27,7 @@ from groket.paths import user_keys_path
 
 KEYS_ENV = "GROKET_KEYS"
 DEFAULT_LEADER_TIMEOUT_MS = 800
-# Textual cannot bind ``leader+X``; sequences are dispatched by the leader state.
-SEQUENCE_UNBOUND = "f24"
+_LIST_NAV_IDS = frozenset({"list.down", "list.up"})
 
 _TOP_LEADER = "leader"
 _TOP_TIMEOUT = "leader_timeout_ms"
@@ -457,23 +456,41 @@ def _default_chords() -> dict[str, str]:
     return {row.id: row.default for row in ACTIONS}
 
 
+def sequence_unbound_slot(action_id: str, *, index: int) -> str:
+    """Distinct Textual chord so each sequence id keeps its own binding.
+
+    Bare function keys are product-reachable. ``ctrl+shift+alt+fN`` is not
+    a catalog default, so a physical F24 cannot fire follow-up.
+
+    :param action_id: Catalog id (unused; slots are assigned by *index*).
+    :param index: Zero-based order among sequence remaps in catalog order.
+    :returns: Textual chord unique for this *index*.
+    """
+    del action_id
+    n = 24 - (index % 12)
+    return f"ctrl+shift+alt+f{n}"
+
+
 def textual_keymap(keymap: Keymap) -> dict[str, str]:
     """Binding.id → chord for Textual ``App.set_keymap``.
 
     Only remappable catalog ids are included. Reserved chords stay on the
     Binding defaults (Esc, Enter, Tab, Shift+Tab, ``?``). Sequence chords
-    map to :data:`SEQUENCE_UNBOUND` so the default single key is released.
+    each get a distinct unused slot so the default single key is released
+    and Textual keeps every sequence Binding.id.
 
     :param keymap: Resolved map (defaults when the overlay is missing or refused).
     :returns: Mapping Textual applies over ``Binding.id``.
     """
     out: dict[str, str] = {}
+    seq_i = 0
     for row in keymap.bindings:
         action = ACTIONS_BY_ID.get(row.id)
         if action is None or not action.remappable:
             continue
         if chord_has_sequence(row.chord):
-            out[row.id] = SEQUENCE_UNBOUND
+            out[row.id] = sequence_unbound_slot(row.id, index=seq_i)
+            seq_i += 1
         else:
             out[row.id] = row.chord
     return out
@@ -540,6 +557,17 @@ def _sequence_errors(remaps: tuple[OverlayRemap, ...], leader: str | None) -> li
         if not chord_has_sequence(remap.chord):
             continue
         uses_sequence = True
+        if remap.action_id in _LIST_NAV_IDS:
+            errors.append(
+                _err(
+                    OverlayErrorKind.INVALID_VALUE,
+                    f"{remap.action_id} cannot use a leader sequence",
+                    scope=remap.scope.value,
+                    action_id=remap.action_id,
+                    chord=remap.chord,
+                )
+            )
+            continue
         if sequence_suffix(remap.chord) is None:
             errors.append(
                 _err(

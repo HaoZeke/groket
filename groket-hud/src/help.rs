@@ -3,6 +3,7 @@
 //! icedtea [`pattern::status_bar`] prints [`ActionTable::footer_hints`];
 //! [`pattern::cheatsheet`] lists the full table. One table shape, two views.
 
+use iced::keyboard::Key;
 use icedtea::action::{Action, ActionTable};
 use icedtea::shortcut::Shortcut;
 
@@ -30,8 +31,11 @@ fn push_mapped(
     msg: Message,
 ) {
     let resolved = overlay.hud_spec(id, spec);
-    if resolved.contains("leader") {
-        table.insert(Action::new(id, title, msg));
+    if let Some(label) = overlay.sequence_display(id, spec) {
+        table.insert(Action::new(id, title, msg).with_shortcut(Shortcut::new(
+            iced::keyboard::Modifiers::empty(),
+            Key::Character(label.into()),
+        )));
         return;
     }
     let parsed = Shortcut::parse(&resolved)
@@ -464,6 +468,45 @@ mod tests {
         );
         let help = help_table_for(&overlay);
         assert!(help.get("leader.prefix").is_some());
+    }
+
+    #[test]
+    fn sequence_actions_show_leader_plus_letter() {
+        let overlay = crate::keys::KeyOverlay::parse(concat!(
+            "leader = \";\"\n",
+            "[home]\n",
+            "\"list.down\" = \"n\"\n",
+            "\"list.up\" = \"e\"\n",
+            "\"session.follow\" = \"leader+n\"\n",
+            "\"session.done\" = \"leader+e\"\n",
+        ))
+        .expect("colemak");
+        let hints = footer_table_for(
+            KeyScope {
+                browse: true,
+                help_open: false,
+                timeline_detail: false,
+                awaiting: true,
+                tab: Tab::Overview,
+                leader_armed: false,
+            },
+            &overlay,
+        )
+        .footer_hints();
+        let blob = hints.join("  ·  ");
+        assert!(blob.contains("; n"), "{blob}");
+        assert!(blob.contains("; e"), "{blob}");
+        let help = help_table_for(&overlay);
+        let follow = help.get("session.follow").expect("follow");
+        assert_eq!(
+            follow.shortcut.as_ref().map(ToString::to_string).as_deref(),
+            Some("; n")
+        );
+        let done = help.get("session.done").expect("done");
+        assert_eq!(
+            done.shortcut.as_ref().map(ToString::to_string).as_deref(),
+            Some("; e")
+        );
     }
 
     #[test]

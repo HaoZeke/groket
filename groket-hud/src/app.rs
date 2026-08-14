@@ -618,7 +618,7 @@ impl Hud {
             let poll = if any_live { LIVE_POLL_MS } else { IDLE_POLL_MS };
             subs.push(time::every(Duration::from_millis(poll)).map(|_| Message::Tick));
         }
-        if self.note_delete_until.is_some() {
+        if self.note_delete_until.is_some() || self.leader_until.is_some() {
             subs.push(time::every(Duration::from_millis(250)).map(|_| Message::Tick));
         }
         subs.push(tray_subscription());
@@ -3327,6 +3327,14 @@ impl Hud {
         self.leader_until = None;
     }
 
+    fn expire_leader(&mut self) {
+        if let Some(until) = self.leader_until {
+            if Instant::now() >= until {
+                self.disarm_leader();
+            }
+        }
+    }
+
     fn dispatch_catalog_id(&mut self, id: &str) -> Task<Message> {
         match id {
             "session.follow" if self.browse_mode() && self.selected_awaiting() => {
@@ -3343,6 +3351,7 @@ impl Hud {
     }
 
     fn handle_leader(&mut self, key: &Key, modifiers: KeyMods) -> Option<Task<Message>> {
+        self.expire_leader();
         if self.typing_notes {
             if self.leader_armed {
                 self.disarm_leader();
@@ -3371,6 +3380,7 @@ impl Hud {
     }
 
     fn on_key(&mut self, key: Key, modifiers: KeyMods) -> Task<Message> {
+        self.expire_leader();
         if matches!(key, Key::Named(Named::Escape)) {
             if self.leader_armed {
                 self.disarm_leader();
@@ -4561,6 +4571,34 @@ mod tests {
         let start = hud.active;
         let _ = hud.on_key(Key::Character("n".into()), Modifiers::empty());
         assert_eq!(hud.active, start + 1, "n after cancel is list.down");
+    }
+
+    #[test]
+    fn leader_expires_before_next_key_is_sequence() {
+        use iced::keyboard::{Key, Modifiers};
+        let mut hud = Hud {
+            keys: colemak_overlay(),
+            all_sessions: vec![
+                SessionRow {
+                    session_id: "s1".into(),
+                    ..SessionRow::default()
+                },
+                SessionRow {
+                    session_id: "s2".into(),
+                    ..SessionRow::default()
+                },
+            ],
+            query: "x".into(),
+            ..Hud::default()
+        };
+        hud.sessions = hud.all_sessions.clone();
+        hud.set_active(0);
+        let _ = hud.on_key(Key::Character(";".into()), Modifiers::empty());
+        assert!(hud.leader_armed());
+        hud.leader_until = Some(Instant::now() - Duration::from_millis(1));
+        let _ = hud.on_key(Key::Character("n".into()), Modifiers::empty());
+        assert!(!hud.leader_armed());
+        assert_eq!(hud.active, 1, "expired arm treats n as list.down");
     }
 
     #[test]

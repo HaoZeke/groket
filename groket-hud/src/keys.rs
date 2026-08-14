@@ -643,6 +643,14 @@ impl KeyOverlay {
         spec_matches(leader, key, mods)
     }
 
+    /// ``; n`` label for a ``leader+X`` remap, or None when *id* is a single chord.
+    pub fn sequence_display(&self, id: &str, default: &str) -> Option<String> {
+        let resolved = self.chord(id, default);
+        let suffix = sequence_suffix(&resolved)?;
+        let leader = self.leader()?;
+        Some(format!("{leader} {suffix}"))
+    }
+
     /// Catalog id bound to ``leader+X`` for this keypress, if any.
     pub fn lookup_sequence(&self, key: &Key, mods: KeyMods) -> Option<&str> {
         for (id, chord) in &self.remaps {
@@ -890,6 +898,9 @@ fn merge_document(doc: &Document) -> Option<KeyOverlay> {
             return None;
         }
         if chord_has_sequence(&remap.chord) || chord_has_sequence(&canon) {
+            if row.id == "list.down" || row.id == "list.up" {
+                return None;
+            }
             if sequence_suffix(&canon).is_none() {
                 return None;
             }
@@ -1236,6 +1247,9 @@ mod tests {
         assert!(KeyOverlay::parse("[global]\n\"help.toggle\" = \"x\"\n").is_none());
         assert!(KeyOverlay::parse("[home]\n\"list.down\" = \"escape\"\n").is_none());
         assert!(KeyOverlay::parse("[home]\n\"session.follow\" = \"leader+n\"\n").is_none());
+        assert!(
+            KeyOverlay::parse("leader = \";\"\n[home]\n\"list.down\" = \"leader+j\"\n").is_none()
+        );
         assert!(KeyOverlay::parse("[nope]\n\"list.down\" = \"h\"\n").is_none());
         assert!(KeyOverlay::parse("[home]\n\"not.an.id\" = \"h\"\n").is_none());
     }
@@ -1275,6 +1289,14 @@ mod tests {
         assert_eq!(
             overlay.lookup_sequence(&Key::Character("e".into()), KeyMods::empty()),
             Some("session.done")
+        );
+        assert_eq!(
+            overlay.sequence_display("session.follow", "n").as_deref(),
+            Some("; n")
+        );
+        assert_eq!(
+            overlay.sequence_display("session.done", "e").as_deref(),
+            Some("; e")
         );
     }
 
