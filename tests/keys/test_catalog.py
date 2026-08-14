@@ -26,8 +26,9 @@ from textual.screen import Screen
 
 _REPO = Path(__file__).resolve().parents[2]
 _HELP_RS = _REPO / "groket-hud" / "src" / "help.rs"
+_KEYS_RS = _REPO / "groket-hud" / "src" / "keys.rs"
 _PUSH = re.compile(
-    r'push\(\s*&mut table,\s*"([^"]+)",\s*"[^"]*",\s*"([^"]+)"',
+    r'push(?:_mapped)?\(\s*&mut table,\s*(?:overlay,\s*)?"([^"]+)",\s*"[^"]*",\s*"([^"]+)"',
     re.S,
 )
 
@@ -259,6 +260,29 @@ def test_tab_nav_bindings_use_catalog_ids() -> None:
     for binding in nav:
         assert binding.id in ACTIONS_BY_ID
         assert _key_matches_default(binding.key, ACTIONS_BY_ID[binding.id].default)
+
+
+def test_hud_overlay_catalog_matches_python() -> None:
+    """Rust overlay catalog must stay aligned with ACTIONS."""
+    text = _KEYS_RS.read_text(encoding="utf-8")
+    rows = re.findall(
+        r'id:\s*"([^"]+)",\s*scope:\s*"([^"]+)",\s*default:\s*"([^"]+)",\s*remappable:\s*(true|false)',
+        text,
+    )
+    found = {action_id: (scope, default, rem == "true") for action_id, scope, default, rem in rows}
+    missing = sorted(set(ACTIONS_BY_ID) - set(found))
+    extra = sorted(set(found) - set(ACTIONS_BY_ID))
+    assert missing == []
+    assert extra == []
+    drifted = []
+    for row in ACTIONS:
+        scope, default, remappable = found[row.id]
+        if scope != row.scope.value or default != row.default or remappable is not row.remappable:
+            drifted.append(
+                f"{row.id}: rust=({scope!r},{default!r},{remappable}) "
+                f"py=({row.scope.value!r},{row.default!r},{row.remappable})"
+            )
+    assert drifted == []
 
 
 def test_action_by_id_roundtrip() -> None:
