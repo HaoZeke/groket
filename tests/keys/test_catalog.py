@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import importlib
+import pkgutil
 import re
 from pathlib import Path
 
@@ -13,18 +15,23 @@ from groket.keys.catalog import (
     ActionScope,
     ActionSurface,
     KeyAction,
-    _index_by_id,
     action_by_id,
     chord_is_reserved,
+    normalize_chord,
 )
 from groket.ui import bindings as B
 from groket.ui.tab_panes import tab_nav_bindings
+from textual.binding import Binding
+from textual.screen import Screen
 
 _REPO = Path(__file__).resolve().parents[2]
 _HELP_RS = _REPO / "groket-hud" / "src" / "help.rs"
-_PUSH_ID = re.compile(r'push\(\s*&mut table,\s*"([^"]+)"')
+_PUSH = re.compile(
+    r'push\(\s*&mut table,\s*"([^"]+)",\s*"[^"]*",\s*"([^"]+)"',
+    re.S,
+)
 
-_BINDING_TUPLES: tuple[tuple[object, ...], ...] = (
+_BINDING_TUPLES: tuple[tuple[Binding, ...], ...] = (
     B.APP_GLOBAL_PRIORITY,
     B.GLOBAL_ALWAYS,
     B.LIST_SELECT,
@@ -37,6 +44,7 @@ _BINDING_TUPLES: tuple[tuple[object, ...], ...] = (
     B.CAPABILITY_PICKER,
     B.PERSONAS,
     B.PERSONA_EDITOR,
+    B.MODAL_CANCEL_QUIT,
     B.FORM_SAVE,
     B.RULES,
     B.MODAL_DISMISS,
@@ -44,11 +52,49 @@ _BINDING_TUPLES: tuple[tuple[object, ...], ...] = (
 )
 
 
-def _hud_push_ids(source: str) -> set[str]:
-    ids = set(_PUSH_ID.findall(source))
+def _hud_push_rows(source: str) -> list[tuple[str, str]]:
+    rows = list(_PUSH.findall(source))
     if 'format!("pane.{n}")' in source:
-        ids.update(f"pane.{i}" for i in range(1, 6))
-    return ids
+        rows.extend((f"pane.{i}", f"ctrl+{i}") for i in range(1, 6))
+    return rows
+
+
+def _key_matches_default(key: str, default: str) -> bool:
+    key_parts = {normalize_chord(p) for p in key.split(",") if p.strip()}
+    default_parts = {normalize_chord(p) for p in default.split(",") if p.strip()}
+    return bool(key_parts) and key_parts <= default_parts
+
+
+def _declared_bindings(raw: object) -> list[Binding]:
+    if not raw:
+        return []
+    out: list[Binding] = []
+    for item in raw:
+        if isinstance(item, Binding):
+            out.append(item)
+        elif isinstance(item, tuple) and 2 <= len(item) <= 3:
+            out.extend(Binding.make_bindings([item]))
+    return out
+
+
+def _import_ui_package() -> None:
+    import groket.ui as ui_pkg
+
+    for info in pkgutil.walk_packages(ui_pkg.__path__, ui_pkg.__name__ + "."):
+        importlib.import_module(info.name)
+
+
+def _local_screens() -> list[type[Screen]]:
+    _import_ui_package()
+    seen: set[type[Screen]] = set()
+    stack: list[type[Screen]] = list(Screen.__subclasses__())
+    while stack:
+        cls = stack.pop()
+        if cls in seen:
+            continue
+        seen.add(cls)
+        stack.extend(cls.__subclasses__())
+    return [cls for cls in seen if cls.__module__.startswith("groket.")]
 
 
 def test_catalog_ids_are_globally_unique() -> None:
@@ -86,6 +132,16 @@ def test_reserved_set_covers_spec_keys() -> None:
     assert not chord_is_reserved("")
 
 
+def test_normalize_chord_textual_and_hud() -> None:
+    assert normalize_chord("slash") == normalize_chord("/")
+    assert normalize_chord("N") == normalize_chord("shift+n")
+    assert normalize_chord("left_square_bracket") == normalize_chord("[")
+    assert normalize_chord("right_square_bracket") == normalize_chord("]")
+    assert normalize_chord("esc") == "escape"
+    assert normalize_chord("f5,ctrl+r") == "f5,ctrl+r"
+    assert normalize_chord("s,space") == "s,space"
+
+
 def test_default_chords_match_today() -> None:
     assert action_by_id("session.follow").default == "n"
     assert action_by_id("session.done").default == "e"
@@ -96,35 +152,67 @@ def test_default_chords_match_today() -> None:
     assert action_by_id("edit.copy_chord").default == "ctrl+shift+c"
 
 
-def test_every_tui_binding_has_catalog_id() -> None:
+def test_tuple_bindings_match_catalog_defaults() -> None:
     missing: list[str] = []
+    drifted: list[str] = []
     for tup in _BINDING_TUPLES:
         for binding in tup:
-            bid = getattr(binding, "id", None)
+            bid = binding.id
             if not bid or bid not in ACTIONS_BY_ID:
-                missing.append(
-                    f"{getattr(binding, 'key', '?')}->{getattr(binding, 'action', '?')}:{bid!r}"
-                )
+                missing.append(f"{binding.key}->{binding.action}:{bid!r}")
+                continue
+            default = ACTIONS_BY_ID[bid].default
+            if not _key_matches_default(binding.key, default):
+                drifted.append(f"{bid}: key={binding.key!r} default={default!r}")
     assert missing == []
+    assert drifted == []
 
 
-def test_binding_spot_check_keys() -> None:
-    follow = [b for b in B.APP_SESSIONS if b.id == "session.follow"]
-    done = [b for b in B.APP_SESSIONS if b.id == "session.done"]
-    copy = [b for b in B.BROWSER if b.id == "edit.copy"]
-    help_b = [b for b in B.GLOBAL_ALWAYS if b.id == "help.toggle"]
-    assert follow and follow[0].key == "n"
-    assert done and done[0].key == "e"
-    assert copy and copy[0].key == "y"
-    assert help_b and help_b[0].key == "?"
+def test_every_screen_binding_has_catalog_id() -> None:
+    missing: list[str] = []
+    drifted: list[str] = []
+    for cls in _local_screens():
+        if "BINDINGS" not in cls.__dict__:
+            continue
+        for binding in _declared_bindings(cls.__dict__["BINDINGS"]):
+            bid = binding.id
+            label = f"{cls.__module__}.{cls.__name__} {binding.key}->{binding.action}"
+            if not bid or bid not in ACTIONS_BY_ID:
+                missing.append(f"{label}:{bid!r}")
+                continue
+            default = ACTIONS_BY_ID[bid].default
+            if not _key_matches_default(binding.key, default):
+                drifted.append(f"{label}: key={binding.key!r} default={default!r}")
+    assert missing == []
+    assert drifted == []
 
 
-def test_every_hud_push_id_is_in_catalog() -> None:
+def test_same_id_alternatives_are_one_binding() -> None:
+    for name in ("app.refresh", "list.select", "session.delete", "personas.delete"):
+        hits = [b for tup in _BINDING_TUPLES for b in tup if b.id == name]
+        keys = {b.key for b in hits}
+        assert all("," in k or k == ACTIONS_BY_ID[name].default for k in keys), (name, keys)
+
+
+def test_copy_keeps_two_ids() -> None:
+    assert "edit.copy" in ACTIONS_BY_ID
+    assert "edit.copy_chord" in ACTIONS_BY_ID
+    assert action_by_id("edit.copy").default == "y"
+    assert action_by_id("edit.copy_chord").default == "ctrl+shift+c"
+
+
+def test_every_hud_push_id_and_spec_matches_catalog() -> None:
     source = _HELP_RS.read_text(encoding="utf-8")
-    ids = _hud_push_ids(source)
-    assert ids, "help.rs should declare push ids"
-    missing = sorted(ids - set(ACTIONS_BY_ID))
+    rows = _hud_push_rows(source)
+    assert rows, "help.rs should declare push ids"
+    missing = sorted({action_id for action_id, _ in rows} - set(ACTIONS_BY_ID))
     assert missing == []
+    drifted: list[str] = []
+    for action_id, spec in rows:
+        default = ACTIONS_BY_ID[action_id].default
+        if normalize_chord(spec) != normalize_chord(default):
+            drifted.append(f"{action_id}: hud={spec!r} default={default!r}")
+    assert drifted == []
 
 
 def test_hud_named_ids_present() -> None:
@@ -158,7 +246,7 @@ def test_list_nav_is_shared_without_tui_binding() -> None:
     assert up.surfaces is ActionSurface.SHARED
     assert down.tui_action is None
     assert up.tui_action is None
-    assert not any(getattr(b, "id", None) == "list.down" for tup in _BINDING_TUPLES for b in tup)
+    assert not any(b.id == "list.down" for tup in _BINDING_TUPLES for b in tup)
 
 
 def test_tab_nav_bindings_use_catalog_ids() -> None:
@@ -170,6 +258,7 @@ def test_tab_nav_bindings_use_catalog_ids() -> None:
     }
     for binding in nav:
         assert binding.id in ACTIONS_BY_ID
+        assert _key_matches_default(binding.key, ACTIONS_BY_ID[binding.id].default)
 
 
 def test_action_by_id_roundtrip() -> None:
@@ -178,9 +267,3 @@ def test_action_by_id_roundtrip() -> None:
     assert row is ACTIONS_BY_ID["session.follow"]
     with pytest.raises(KeyError):
         action_by_id("not.an.action")
-
-
-def test_index_rejects_duplicate_ids() -> None:
-    row = action_by_id("help.toggle")
-    with pytest.raises(ValueError, match="duplicate catalog ids"):
-        _index_by_id((row, row))

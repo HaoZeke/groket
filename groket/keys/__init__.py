@@ -11,6 +11,7 @@ from .catalog import (
     KeyAction,
     action_by_id,
     chord_is_reserved,
+    normalize_chord,
 )
 
 __all__ = [
@@ -22,4 +23,5 @@ __all__ = [
     "KeyAction",
     "action_by_id",
     "chord_is_reserved",
+    "normalize_chord",
 ]

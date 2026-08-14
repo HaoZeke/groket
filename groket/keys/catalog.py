@@ -1,7 +1,9 @@
 """Typed catalog of TUI and HUD key actions.
 
 Each row is one action. Textual ``Binding.id`` and HUD ``help.rs`` push ids
-use :attr:`KeyAction.id`. Defaults match current bindings and HUD tables.
+use :attr:`KeyAction.id`. :attr:`KeyAction.default` is Textual notation
+(``slash``, ``N``, ``left_square_bracket``); compare HUD specs with
+:func:`normalize_chord`.
 """
 
 from __future__ import annotations
@@ -9,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
-# Bare chords that must keep the product job (spec non-goals).
+# Overlay cannot steal dismiss, activate, focus-traversal, or ``?``.
 RESERVED_KEYS: frozenset[str] = frozenset(
     {
         "escape",
@@ -20,6 +22,13 @@ RESERVED_KEYS: frozenset[str] = frozenset(
         "?",
     }
 )
+
+_KEY_ALIASES: dict[str, str] = {
+    "/": "slash",
+    "[": "left_square_bracket",
+    "]": "right_square_bracket",
+    "esc": "escape",
+}
 
 
 class ActionScope(str, Enum):
@@ -51,11 +60,11 @@ class KeyAction:
 
     :ivar id: Dotted id (HUD-shaped); Textual ``Binding.id`` uses this value.
     :ivar scope: Screen family the default lives in.
-    :ivar default: Textual-style chord; comma-list for alternatives.
+    :ivar default: Textual notation; comma-list for alternatives.
     :ivar surfaces: ``shared``, ``tui``, or ``hud``.
     :ivar remappable: False for reserved chords (Esc, Enter, Tab, Shift+Tab, ``?``).
     :ivar tui_action: Textual action name, or None when the TUI has no Binding.
-    :ivar hud_message: Stable HUD dispatch token, or None when HUD-only later.
+    :ivar hud_message: Stable HUD dispatch token, or None when the HUD does not dispatch.
     """
 
     id: str
@@ -65,6 +74,42 @@ class KeyAction:
     remappable: bool
     tui_action: str | None
     hud_message: str | None
+
+
+def _normalize_part(part: str) -> str:
+    raw = part.strip()
+    if not raw:
+        return ""
+    if "+" in raw:
+        bits = [b.strip() for b in raw.split("+") if b.strip()]
+        if not bits:
+            return ""
+        *mods, key = bits
+        mods_l = [m.lower() for m in mods]
+        if len(key) == 1 and key.isalpha() and key.isupper() and "shift" not in mods_l:
+            mods_l.append("shift")
+            key = key.lower()
+        key_l = key.lower()
+        key_c = _KEY_ALIASES.get(key, _KEY_ALIASES.get(key_l, key_l if key.isalpha() else key))
+        return "+".join([*mods_l, key_c])
+    if len(raw) == 1 and raw.isalpha() and raw.isupper():
+        return f"shift+{raw.lower()}"
+    low = raw.lower()
+    return _KEY_ALIASES.get(raw, _KEY_ALIASES.get(low, low if raw.isalpha() else raw))
+
+
+def normalize_chord(chord: str) -> str:
+    """Canonical Textual notation for one chord or a comma-list.
+
+    HUD specs use ``/``, ``shift+n``, and ``[``; catalog defaults use
+    ``slash``, ``N``, and ``left_square_bracket``. Overlay merge compares
+    these forms after this function.
+
+    :param chord: Textual or HUD chord (comma-list allowed).
+    :returns: Canonical comma-list.
+    """
+    parts = [_normalize_part(p) for p in chord.split(",")]
+    return ",".join(p for p in parts if p)
 
 
 def chord_is_reserved(chord: str) -> bool:
@@ -218,14 +263,14 @@ ACTIONS: tuple[KeyAction, ...] = (
     _a(
         "events.next_turn",
         ActionScope.BROWSER,
-        "]",
+        "right_square_bracket",
         ActionSurface.HUD,
         hud_message="noop",
     ),
     _a(
         "events.all_turns",
         ActionScope.BROWSER,
-        "[",
+        "left_square_bracket",
         ActionSurface.HUD,
         hud_message="noop",
     ),
@@ -584,6 +629,55 @@ ACTIONS: tuple[KeyAction, ...] = (
         "ctrl+s",
         ActionSurface.TUI,
         tui_action="done",
+    ),
+    _a(
+        "modal.submit",
+        ActionScope.MODAL,
+        "ctrl+r",
+        ActionSurface.TUI,
+        tui_action="submit",
+    ),
+    _a(
+        "modal.submit_enter",
+        ActionScope.MODAL,
+        "enter",
+        ActionSurface.TUI,
+        tui_action="submit",
+    ),
+    _a(
+        "mcp.registry",
+        ActionScope.MODAL,
+        "r",
+        ActionSurface.TUI,
+        tui_action="registry_mode",
+    ),
+    _a(
+        "mcp.local",
+        ActionScope.MODAL,
+        "l",
+        ActionSurface.TUI,
+        tui_action="local_mode",
+    ),
+    _a(
+        "confirm.discard",
+        ActionScope.MODAL,
+        "enter,y",
+        ActionSurface.TUI,
+        tui_action="discard",
+    ),
+    _a(
+        "confirm.keep",
+        ActionScope.MODAL,
+        "n",
+        ActionSurface.TUI,
+        tui_action="keep",
+    ),
+    _a(
+        "help.dismiss",
+        ActionScope.MODAL,
+        "enter",
+        ActionSurface.TUI,
+        tui_action="dismiss",
     ),
 )
 

@@ -59,15 +59,13 @@ APP_GLOBAL_PRIORITY: tuple[Binding, ...] = (
 
 GLOBAL_ALWAYS: tuple[Binding, ...] = (
     _b("?", "show_help", U.bind_help(), id="help.toggle", show=True),
-    _b("f5", "refresh_context", U.bind_refresh(), id="app.refresh", show=False),
-    _b("ctrl+r", "refresh_context", U.bind_refresh(), id="app.refresh", show=False),
+    _b("f5,ctrl+r", "refresh_context", U.bind_refresh(), id="app.refresh", show=False),
     _b("J", "open_jobs", U.bind_jobs(), id="app.jobs", show=True),
     _b("ctrl+t", "self_test", t("ui-self-test"), id="app.self_test", show=False),
     _b("q", "quit", U.bind_quit(), id="app.quit", show=True),
 )
 LIST_SELECT: tuple[Binding, ...] = (
-    _b("s", "toggle_select", U.bind_select(), id="list.select", show=True),
-    _b("space", "toggle_select", U.bind_select(), id="list.select", show=False),
+    _b("s,space", "toggle_select", U.bind_select(), id="list.select", show=True),
 )
 LIST_SELECT_ALL: tuple[Binding, ...] = (
     _b("S", "select_all_toggle", U.bind_select_all(), id="list.select_all", show=False),
@@ -79,14 +77,12 @@ APP_SESSIONS: tuple[Binding, ...] = GLOBAL_ALWAYS + (
     _b("r", "open_runner", U.bind_runner(), id="home.runner", show=True),
     _b("C", "open_run_configs", U.bind_configs(), id="home.configs", show=True),
     _b("P", "open_personas", U.bind_personas(), id="home.personas", show=True),
-    _b("s", "toggle_select", U.bind_select(), id="list.select", show=True),
-    _b("space", "toggle_select", U.bind_select(), id="list.select", show=False),
+    _b("s,space", "toggle_select", U.bind_select(), id="list.select", show=True),
     _b("S", "select_all", U.bind_select_all(), id="list.select_all", show=False),
     _b("R", "rerun_session", U.bind_rerun(), id="session.rerun", show=False),
     _b("f", "resume_session", U.bind_resume(), id="session.resume", show=True),
     _ctrl_s("save_session_config", U.bind_save_cfg(), id="session.save_config", show=True),
-    _b("x", "delete_sessions", U.bind_delete(), id="session.delete", show=False),
-    _b("delete", "delete_sessions", U.bind_delete(), id="session.delete", show=False),
+    _b("x,delete", "delete_sessions", U.bind_delete(), id="session.delete", show=False),
     _b("m", "cycle_model_filter", U.bind_model(), id="home.model_filter", show=False),
     _b("a", "analyze", U.bind_analyze(), id="session.analyze", show=False),
     _b("d", "open_rules", U.bind_rules(), id="home.rules", show=False),
@@ -100,8 +96,7 @@ APP_SESSIONS: tuple[Binding, ...] = GLOBAL_ALWAYS + (
 SCREEN_CHROME: tuple[Binding, ...] = (
     _b("?", "show_help", U.bind_help(), id="help.toggle", show=True),
     _b("escape", "go_back", U.bind_back(), id="overlay.hide", show=True),
-    _b("f5", "refresh_context", U.bind_refresh(), id="app.refresh", show=False),
-    _b("ctrl+r", "refresh_context", U.bind_refresh(), id="app.refresh", show=False),
+    _b("f5,ctrl+r", "refresh_context", U.bind_refresh(), id="app.refresh", show=False),
     _b("J", "open_jobs", U.bind_jobs(), id="app.jobs", show=False),
     _b("ctrl+t", "self_test", t("ui-self-test"), id="app.self_test", show=False),
     _b("q", "quit", U.bind_quit(), id="app.quit", show=True),
@@ -144,8 +139,7 @@ BROWSER: tuple[Binding, ...] = (
         _b("slash", "search", U.bind_search(), id="search.focus", show=False),
         _b("c", "clear_filters", U.bind_clear_view(), id="browser.clear_filters", show=False),
         _b("i", "tab_pane_4", U.bind_findings(), id="browser.findings", show=False),
-        _b("x", "delete_session", U.bind_delete(), id="session.delete", show=False),
-        _b("delete", "delete_session", U.bind_delete(), id="session.delete", show=False),
+        _b("x,delete", "delete_session", U.bind_delete(), id="session.delete", show=False),
         _b("s", "open_share", U.bind_share(), id="session.share", show=False),
         # y = yank detail / selection to clipboard (Textual mouse select + OSC 52).
         _b("y", "copy_detail", U.bind_copy_detail(), id="edit.copy", show=True),
@@ -214,27 +208,23 @@ RUN_CONFIGS: tuple[Binding, ...] = (
 CAPABILITY_PICKER: tuple[Binding, ...] = (
     _b("escape", "cancel", U.bind_cancel(), id="overlay.hide", show=True),
     _b("q", "quit", U.bind_quit(), id="app.quit", show=True),
-    _b("s", "toggle_select", U.bind_select(), id="list.select", show=True),
-    _b("space", "toggle_select", U.bind_select(), id="list.select", show=False),
+    _b("s,space", "toggle_select", U.bind_select(), id="list.select", show=True),
     _ctrl_s("done", U.bind_done(), id="modal.done", show=True),
 )
 PERSONAS: tuple[Binding, ...] = SCREEN_CHROME + (
     _b("n", "new_persona", U.bind_new(), id="personas.new", show=True),
     _b("enter", "edit_persona", U.bind_edit(), id="session.open", show=True),
     _b("e", "edit_persona", U.bind_edit(), id="personas.edit", show=False),
-    _b("x", "delete_persona", U.bind_delete(), id="personas.delete", show=True),
-    _b("delete", "delete_persona", U.bind_delete(), id="personas.delete", show=False),
+    _b("x,delete", "delete_persona", U.bind_delete(), id="personas.delete", show=True),
 )
-PERSONA_EDITOR: tuple[Binding, ...] = (
+MODAL_CANCEL_QUIT: tuple[Binding, ...] = (
     _b("escape", "cancel", U.bind_cancel(), id="overlay.hide", show=True),
     _b("q", "quit", U.bind_quit(), id="app.quit", show=True),
-    _ctrl_s("save", U.bind_save(), id="edit.save", show=True),
-) + tab_nav_bindings(6)
-FORM_SAVE: tuple[Binding, ...] = (
-    _b("escape", "cancel", U.bind_cancel(), id="overlay.hide", show=True),
-    _b("q", "quit", U.bind_quit(), id="app.quit", show=True),
+)
+FORM_SAVE: tuple[Binding, ...] = MODAL_CANCEL_QUIT + (
     _ctrl_s("save", U.bind_save(), id="edit.save", show=True),
 )
+PERSONA_EDITOR: tuple[Binding, ...] = FORM_SAVE + tab_nav_bindings(6)
 RULES: tuple[Binding, ...] = SCREEN_CHROME + (
     _b("t", "toggle_rule", U.bind_toggle(), id="rules.toggle", show=True),
     _b("a", "enable_all", U.bind_enable_all(), id="rules.enable_all", show=False),
@@ -249,8 +239,7 @@ JOBS_MODAL: tuple[Binding, ...] = (
     _b("escape", "dismiss_modal", U.bind_close(), id="overlay.hide", show=True),
     _b("J", "dismiss_modal", U.bind_close(), id="jobs.close", show=False),
     _b("q", "quit", U.bind_quit(), id="app.quit", show=True),
-    _b("f5", "refresh", U.bind_refresh(), id="app.refresh", show=False),
-    _b("ctrl+r", "refresh", U.bind_refresh(), id="app.refresh", show=False),
+    _b("f5,ctrl+r", "refresh", U.bind_refresh(), id="app.refresh", show=False),
     _b("enter", "open_session", U.bind_open(), id="session.open", show=True),
     _b("o", "open_session", U.bind_open(), id="jobs.open_alt", show=False),
     _b("s", "open_share", U.bind_share(), id="session.share", show=True),
