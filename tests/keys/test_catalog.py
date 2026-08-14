@@ -240,14 +240,21 @@ def test_hud_named_ids_present() -> None:
         assert action_id in ACTIONS_BY_ID
 
 
-def test_list_nav_is_shared_without_tui_binding() -> None:
+def test_list_nav_is_shared_table_binding() -> None:
+    from groket.ui.data_table import style_data_table
+    from textual.widgets import DataTable
+
     down = action_by_id("list.down")
     up = action_by_id("list.up")
     assert down.surfaces is ActionSurface.SHARED
     assert up.surfaces is ActionSurface.SHARED
     assert down.tui_action is None
     assert up.tui_action is None
-    assert not any(b.id == "list.down" for tup in _BINDING_TUPLES for b in tup)
+    table = DataTable()
+    style_data_table(table)
+    ids = {binding.id for _key, binding in table._bindings}
+    assert "list.down" in ids
+    assert "list.up" in ids
 
 
 def test_tab_nav_bindings_use_catalog_ids() -> None:

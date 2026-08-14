@@ -606,11 +606,21 @@ impl KeyOverlay {
     }
 }
 
+fn expand_user(raw: &str) -> PathBuf {
+    if raw == "~" {
+        return PathBuf::from(std::env::var_os("HOME").unwrap_or_default());
+    }
+    if let Some(rest) = raw.strip_prefix("~/") {
+        return PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(rest);
+    }
+    PathBuf::from(raw)
+}
+
 fn resolve_keys_path() -> PathBuf {
     if let Ok(raw) = std::env::var(KEYS_ENV) {
         let trimmed = raw.trim();
         if !trimmed.is_empty() {
-            return PathBuf::from(trimmed);
+            return expand_user(trimmed);
         }
     }
     let home = std::env::var_os("HOME").unwrap_or_default();
@@ -647,20 +657,28 @@ fn parse_document(text: &str) -> Option<Document> {
             scope = Some(name);
             continue;
         }
-        let (key, quoted, value) = parse_assign(line)?;
+        let (key, quoted, val_raw) = parse_assign(line)?;
         if scope.is_none() {
-            if key == "leader" || key == "leader_timeout_ms" {
-                continue;
+            match key.as_str() {
+                "leader" => {
+                    let leader = parse_quoted_string(&val_raw)?;
+                    validate_leader(&leader)?;
+                }
+                "leader_timeout_ms" => {
+                    parse_positive_timeout(&val_raw)?;
+                }
+                _ => return None,
             }
-            return None;
+            continue;
         }
         if !quoted && key.contains('.') {
             return None;
         }
+        let chord = parse_quoted_string(&val_raw)?;
         remaps.push(Remap {
             scope: scope.clone().unwrap(),
             id: key,
-            chord: value,
+            chord,
         });
     }
     Some(Document { remaps })
@@ -668,18 +686,23 @@ fn parse_document(text: &str) -> Option<Document> {
 
 fn strip_comment(line: &str) -> String {
     let mut out = String::new();
-    let mut in_str = false;
+    let mut quote: Option<char> = None;
     let mut chars = line.chars().peekable();
     while let Some(c) = chars.next() {
-        if c == '"' {
-            in_str = !in_str;
+        if quote.is_none() && (c == '"' || c == '\'') {
+            quote = Some(c);
             out.push(c);
             continue;
         }
-        if c == '#' && !in_str {
+        if quote == Some(c) {
+            quote = None;
+            out.push(c);
+            continue;
+        }
+        if c == '#' && quote.is_none() {
             break;
         }
-        if c == '\\' && in_str {
+        if c == '\\' && quote == Some('"') {
             out.push(c);
             if let Some(n) = chars.next() {
                 out.push(n);
@@ -708,16 +731,15 @@ fn parse_assign(line: &str) -> Option<(String, bool, String)> {
     let key_raw = line[..eq].trim();
     let val_raw = line[eq + 1..].trim();
     let (key, quoted) = parse_key_token(key_raw)?;
-    let value = parse_string_value(val_raw)?;
-    if key.is_empty() || value.is_empty() {
+    if key.is_empty() || val_raw.is_empty() {
         return None;
     }
-    Some((key, quoted, value))
+    Some((key, quoted, val_raw.to_string()))
 }
 
 fn parse_key_token(raw: &str) -> Option<(String, bool)> {
-    if raw.starts_with('"') && raw.ends_with('"') && raw.len() >= 2 {
-        return Some((raw[1..raw.len() - 1].to_string(), true));
+    if let Some(inner) = parse_quoted_string(raw) {
+        return Some((inner, true));
     }
     if raw
         .chars()
@@ -728,14 +750,45 @@ fn parse_key_token(raw: &str) -> Option<(String, bool)> {
     None
 }
 
-fn parse_string_value(raw: &str) -> Option<String> {
-    if raw.starts_with('"') && raw.ends_with('"') && raw.len() >= 2 {
-        return Some(raw[1..raw.len() - 1].to_string());
+fn parse_quoted_string(raw: &str) -> Option<String> {
+    let t = raw.trim();
+    if t.len() < 2 {
+        return None;
     }
-    if raw.chars().all(|c| c.is_ascii_digit()) {
-        return Some(raw.to_string());
+    let bytes = t.as_bytes();
+    let quote = bytes[0];
+    if (quote == b'"' || quote == b'\'') && bytes[t.len() - 1] == quote {
+        let inner = &t[1..t.len() - 1];
+        if inner.is_empty() {
+            return None;
+        }
+        return Some(inner.to_string());
     }
     None
+}
+
+fn parse_positive_timeout(raw: &str) -> Option<i64> {
+    let t = raw.trim();
+    if t.is_empty() || !t.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    let n: i64 = t.parse().ok()?;
+    if n <= 0 {
+        return None;
+    }
+    Some(n)
+}
+
+fn validate_leader(raw: &str) -> Option<()> {
+    let s = raw.trim();
+    if s.is_empty() || s.contains(',') || chord_has_sequence(s) {
+        return None;
+    }
+    let canon = normalize_chord(s);
+    if canon.is_empty() || chord_is_reserved(&canon) {
+        return None;
+    }
+    Some(())
 }
 
 fn merge_document(doc: &Document) -> Option<KeyOverlay> {
@@ -1103,5 +1156,57 @@ mod tests {
         ] {
             assert!(action_by_id(id).is_some(), "{id}");
         }
+    }
+
+    #[test]
+    fn parse_parity_with_python_fixtures() {
+        let cases: &[(&str, bool)] = &[
+            (
+                include_str!("../../tests/keys/fixtures/overlay_integer_remap.toml"),
+                false,
+            ),
+            (
+                include_str!("../../tests/keys/fixtures/overlay_single_quote.toml"),
+                true,
+            ),
+            (
+                include_str!("../../tests/keys/fixtures/overlay_reserved_leader.toml"),
+                false,
+            ),
+            (
+                include_str!("../../tests/keys/fixtures/overlay_timeout_zero.toml"),
+                false,
+            ),
+            (
+                include_str!("../../tests/keys/fixtures/overlay_valid_timeout.toml"),
+                true,
+            ),
+        ];
+        for (text, expect_ok) in cases {
+            assert_eq!(
+                KeyOverlay::parse(text).is_some(),
+                *expect_ok,
+                "body:\n{text}"
+            );
+        }
+        let quoted = KeyOverlay::parse(include_str!(
+            "../../tests/keys/fixtures/overlay_single_quote.toml"
+        ))
+        .expect("single-quoted remap");
+        assert_eq!(quoted.chord("session.follow", "n"), "z");
+    }
+
+    #[test]
+    fn groket_keys_expands_tilde() {
+        let home = std::env::var_os("HOME").unwrap_or_default();
+        assert_eq!(
+            expand_user("~/.groket/keys.toml"),
+            PathBuf::from(&home).join(".groket").join("keys.toml")
+        );
+        assert_eq!(expand_user("~"), PathBuf::from(&home));
+        assert_eq!(
+            expand_user("/abs/keys.toml"),
+            PathBuf::from("/abs/keys.toml")
+        );
     }
 }

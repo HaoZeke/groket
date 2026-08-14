@@ -406,3 +406,28 @@ def test_textual_keymap_defaults_without_overlay() -> None:
     assert mapped["list.down"] == action_by_id("list.down").default
     assert mapped["session.follow"] == action_by_id("session.follow").default
     assert "help.toggle" not in mapped
+
+
+_FIXTURES = Path(__file__).resolve().parent / "fixtures"
+_PARSER_PARITY: tuple[tuple[str, bool], ...] = (
+    ("overlay_integer_remap.toml", False),
+    ("overlay_single_quote.toml", True),
+    ("overlay_reserved_leader.toml", False),
+    ("overlay_timeout_zero.toml", False),
+    ("overlay_valid_timeout.toml", True),
+)
+
+
+def test_parser_parity_fixtures_match_load_keymap(tmp_path: Path, monkeypatch) -> None:
+    """Same file body: load_keymap().ok matches HUD KeyOverlay::parse is Some."""
+    for name, expect_ok in _PARSER_PARITY:
+        text = (_FIXTURES / name).read_text(encoding="utf-8")
+        path = _write(tmp_path / name, text)
+        monkeypatch.setenv(KEYS_ENV, str(path))
+        keymap = load_keymap()
+        assert keymap.ok is expect_ok, name
+        if name == "overlay_single_quote.toml":
+            assert _follow_chord(keymap) == "z"
+        if not expect_ok:
+            assert keymap.loaded_overlay is False
+            assert _follow_chord(keymap) == "n"
