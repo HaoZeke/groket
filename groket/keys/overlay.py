@@ -1,8 +1,8 @@
 """Load optional ``keys.toml`` diffs over the catalog.
 
 Missing file keeps catalog defaults. A bad overlay is refused in full.
-Parse accepts ``leader`` / ``leader+X``; ``load_keymap`` and ``--check``
-refuse those chords with ``sequence_not_wired``.
+``leader`` plus ``leader+X`` sequences are accepted and dispatched by the
+TUI and HUD (one leader, then one letter).
 """
 
 from __future__ import annotations
@@ -27,6 +27,8 @@ from groket.paths import user_keys_path
 
 KEYS_ENV = "GROKET_KEYS"
 DEFAULT_LEADER_TIMEOUT_MS = 800
+# Textual cannot bind ``leader+X``; sequences are dispatched by the leader state.
+SEQUENCE_UNBOUND = "f24"
 
 _TOP_LEADER = "leader"
 _TOP_TIMEOUT = "leader_timeout_ms"
@@ -121,6 +123,18 @@ class Keymap:
         """True when defaults plus overlay are valid."""
         return not self.errors
 
+    def lookup_sequence(self, suffix: str) -> str | None:
+        """Return the action id bound to ``leader+suffix``, if any.
+
+        :param suffix: The key after the leader.
+        :returns: Catalog id, or None.
+        """
+        want = normalize_chord(f"leader+{suffix}")
+        for row in self.bindings:
+            if normalize_chord(row.chord) == want:
+                return row.id
+        return None
+
     def binding(self, action_id: str) -> ResolvedBinding:
         """Return the resolved row for *action_id*.
 
@@ -156,6 +170,38 @@ def chord_has_sequence(chord: str) -> bool:
         if "leader" in bits:
             return True
     return False
+
+
+def sequence_suffix(chord: str) -> str | None:
+    """Return the letter of a ``leader+X`` chord, or None when not a valid sequence.
+
+    :param chord: Textual-style chord or comma-list.
+    :returns: The single suffix key, or None.
+    """
+    parts = [p for p in _chord_parts(chord) if p]
+    if len(parts) != 1:
+        return None
+    bits = [b.strip() for b in parts[0].split("+") if b.strip()]
+    if len(bits) != 2 or bits[0] != "leader":
+        return None
+    suffix = bits[1]
+    if not suffix or suffix == "leader" or chord_is_reserved(suffix):
+        return None
+    return suffix
+
+
+def format_leader_chord(leader: str | None, chord: str) -> str:
+    """Display form for a sequence (``; n``) or a normal chord.
+
+    :param leader: Configured leader key, if any.
+    :param chord: Resolved chord.
+    :returns: Operator-facing label.
+    """
+    suffix = sequence_suffix(chord)
+    if suffix is None:
+        return chord
+    lead = leader or "leader"
+    return f"{lead} {suffix}"
 
 
 def _err(
@@ -233,7 +279,8 @@ def _lookup_overlay_action(scope: ActionScope, action_id: str) -> KeyAction | Ov
             scope=scope.value,
             action_id=action_id,
         )
-    if row.scope is not scope:
+    allowed = row.overlay_scopes or frozenset({row.scope})
+    if scope not in allowed:
         return _err(
             OverlayErrorKind.UNKNOWN_ID,
             f"action {action_id!r} belongs to [{row.scope.value}], not [{scope.value}]",
@@ -414,7 +461,8 @@ def textual_keymap(keymap: Keymap) -> dict[str, str]:
     """Binding.id → chord for Textual ``App.set_keymap``.
 
     Only remappable catalog ids are included. Reserved chords stay on the
-    Binding defaults (Esc, Enter, Tab, Shift+Tab, ``?``).
+    Binding defaults (Esc, Enter, Tab, Shift+Tab, ``?``). Sequence chords
+    map to :data:`SEQUENCE_UNBOUND` so the default single key is released.
 
     :param keymap: Resolved map (defaults when the overlay is missing or refused).
     :returns: Mapping Textual applies over ``Binding.id``.
@@ -424,7 +472,10 @@ def textual_keymap(keymap: Keymap) -> dict[str, str]:
         action = ACTIONS_BY_ID.get(row.id)
         if action is None or not action.remappable:
             continue
-        out[row.id] = row.chord
+        if chord_has_sequence(row.chord):
+            out[row.id] = SEQUENCE_UNBOUND
+        else:
+            out[row.id] = row.chord
     return out
 
 
@@ -482,19 +533,73 @@ def _clash_errors(chords: dict[str, str]) -> list[OverlayError]:
     return errors
 
 
-def _sequence_errors(remaps: tuple[OverlayRemap, ...]) -> list[OverlayError]:
+def _sequence_errors(remaps: tuple[OverlayRemap, ...], leader: str | None) -> list[OverlayError]:
     errors: list[OverlayError] = []
+    uses_sequence = False
     for remap in remaps:
         if not chord_has_sequence(remap.chord):
             continue
+        uses_sequence = True
+        if sequence_suffix(remap.chord) is None:
+            errors.append(
+                _err(
+                    OverlayErrorKind.INVALID_VALUE,
+                    f"sequence chord {remap.chord!r} must be leader+key "
+                    f"({remap.action_id} in [{remap.scope.value}])",
+                    scope=remap.scope.value,
+                    action_id=remap.action_id,
+                    chord=remap.chord,
+                )
+            )
+    if uses_sequence and not leader:
         errors.append(
             _err(
-                OverlayErrorKind.SEQUENCE_NOT_WIRED,
-                f"sequence chord {remap.chord!r} is not wired yet "
-                f"({remap.action_id} in [{remap.scope.value}])",
-                scope=remap.scope.value,
-                action_id=remap.action_id,
-                chord=remap.chord,
+                OverlayErrorKind.INVALID_VALUE,
+                "leader+X requires a leader key",
+            )
+        )
+    return errors
+
+
+def _duplicate_remap_errors(remaps: tuple[OverlayRemap, ...]) -> list[OverlayError]:
+    seen: dict[str, str] = {}
+    errors: list[OverlayError] = []
+    for remap in remaps:
+        prev = seen.get(remap.action_id)
+        canon = normalize_chord(remap.chord)
+        if prev is not None and prev != canon:
+            errors.append(
+                _err(
+                    OverlayErrorKind.CLASH,
+                    f"{remap.action_id} remapped to both {prev} and {canon}",
+                    action_id=remap.action_id,
+                    chord=canon,
+                )
+            )
+        seen[remap.action_id] = canon
+    return errors
+
+
+def _leader_clash_errors(chords: dict[str, str], leader: str | None) -> list[OverlayError]:
+    if not leader:
+        return []
+    lead = normalize_chord(leader)
+    if not lead:
+        return []
+    errors: list[OverlayError] = []
+    occ = _occupancy(chords)
+    for scope, parts in occ.items():
+        ids = parts.get(lead)
+        if not ids:
+            continue
+        listed = ", ".join(ids)
+        errors.append(
+            _err(
+                OverlayErrorKind.CLASH,
+                f"[{scope.value}] leader {lead} is bound to {listed}",
+                scope=scope.value,
+                action_id=ids[0],
+                chord=lead,
             )
         )
     return errors
@@ -514,7 +619,12 @@ def _merge_document(doc: OverlayDocument, path: Path) -> Keymap:
     chords = _default_chords()
     for remap in doc.remaps:
         chords[remap.action_id] = normalize_chord(remap.chord)
-    errors = (*_clash_errors(chords), *_sequence_errors(doc.remaps))
+    errors = (
+        *_duplicate_remap_errors(doc.remaps),
+        *_clash_errors(chords),
+        *_sequence_errors(doc.remaps, doc.leader),
+        *_leader_clash_errors(chords, doc.leader),
+    )
     if errors:
         failed = default_keymap(path)
         return Keymap(
