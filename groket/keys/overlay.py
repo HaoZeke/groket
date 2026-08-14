@@ -1,8 +1,8 @@
 """Load optional ``keys.toml`` diffs over the catalog.
 
 Missing file keeps catalog defaults. A bad overlay is refused in full.
-Sequence chords (``leader+n``) parse; resolve/check reject them until
-the dispatcher exists.
+Parse accepts ``leader`` / ``leader+X``; ``load_keymap`` and ``--check``
+refuse those chords with ``sequence_not_wired``.
 """
 
 from __future__ import annotations
@@ -545,7 +545,7 @@ def load_keymap(path: Path | None = None) -> Keymap:
         return default_keymap(target)
     try:
         text = target.read_text(encoding="utf-8")
-    except OSError as exc:
+    except (OSError, UnicodeDecodeError) as exc:
         return Keymap(
             bindings=default_keymap(target).bindings,
             leader=None,
