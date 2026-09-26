@@ -1,0 +1,31 @@
+# Copy to ~/.groket/notes_schema.toml and edit field ids/labels for your workflow.
+# Field ids must match ^[A-Za-z_][A-Za-z0-9_-]*$
+# Labels are free-form (shown as-is in the TUI). Without this file, package
+# defaults use Fluent messages notes-field-summary / notes-field-detail.
+#
+# Optional constrained fields:
+#   choices = ["a", "b", …]   allowed values
+#   pick = "one-of" | "many"  dropdown (default) or multi-select
+# Omit choices for free text (backward compatible).
+
+schema_id = "default"
+
+[[fields]]
+id = "summary"
+label = "Summary"
+
+[[fields]]
+id = "detail"
+label = "Detail"
+
+[[fields]]
+id = "severity"
+label = "Severity"
+choices = ["low", "medium", "high"]
+pick = "one-of"
+
+[[fields]]
+id = "tags"
+label = "Tags"
+choices = ["regression", "ux", "tooling", "security"]
+pick = "many"

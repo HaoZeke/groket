@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="groket">
+  <title>groket</title>
+  <rect width="32" height="32" fill="none"/>
+  <g transform="translate(0 9.1429)">
+  <g id="groket-small">
+    <rect x="0" y="0" width="27.428571428571427" height="4.571428571428571" fill="#282828"/>
+    <rect x="27.428571428571427" y="0" width="4.571428571428571" height="4.571428571428571" fill="#CC241D"/>
+    <rect x="0" y="4.571428571428571" width="27.428571428571427" height="4.571428571428571" fill="#282828"/>
+    <rect x="27.428571428571427" y="4.571428571428571" width="4.571428571428571" height="4.571428571428571" fill="#98971A"/>
+    <rect x="0" y="9.142857142857142" width="18.285714285714285" height="4.571428571428571" fill="#282828"/>
+    <rect x="18.285714285714285" y="9.142857142857142" width="4.571428571428571" height="4.571428571428571" fill="#D79921"/>
+  </g>
+  </g>
+</svg>

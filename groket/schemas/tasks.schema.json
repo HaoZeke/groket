@@ -1,0 +1,339 @@
+{
+  "$defs": {
+    "TaskDefaults": {
+      "additionalProperties": false,
+      "description": "Document-level defaults inherited by each task unless overridden.",
+      "properties": {
+        "docker_image": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Docker Image"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "category": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Category"
+        },
+        "domain": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Domain"
+        },
+        "horizon": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Horizon"
+        },
+        "persona_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Persona Id"
+        },
+        "models": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Models"
+        },
+        "env": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Env"
+        },
+        "max_turns": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Grok --max-turns (agent steps per prompt). Default 50 when omitted on a task.",
+          "title": "Max Turns"
+        }
+      },
+      "title": "TaskDefaults",
+      "type": "object"
+    },
+    "TaskDefinition": {
+      "description": "One evaluation task entry under ``tasks:``.",
+      "properties": {
+        "task_id": {
+          "minLength": 1,
+          "title": "Task Id",
+          "type": "string"
+        },
+        "prompt": {
+          "minLength": 1,
+          "title": "Prompt",
+          "type": "string"
+        },
+        "repo_url": {
+          "default": "",
+          "title": "Repo Url",
+          "type": "string"
+        },
+        "repo_branch": {
+          "default": "",
+          "title": "Repo Branch",
+          "type": "string"
+        },
+        "repo_path": {
+          "default": "",
+          "description": "Absolute or ~ path on the host to bind-mount as /workspace. Edits land in that directory. Single model only (no multi-model fan-out).",
+          "title": "Repo Path",
+          "type": "string"
+        },
+        "initial_commands": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Initial Commands"
+        },
+        "setup_instructions": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Setup Instructions"
+        },
+        "setup": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Setup"
+        },
+        "docker_image": {
+          "default": "fully-loaded",
+          "title": "Docker Image",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "category": {
+          "default": "regular",
+          "title": "Category",
+          "type": "string"
+        },
+        "domain": {
+          "default": "general-swe",
+          "title": "Domain",
+          "type": "string"
+        },
+        "horizon": {
+          "default": "long",
+          "title": "Horizon",
+          "type": "string"
+        },
+        "persona_id": {
+          "default": "",
+          "title": "Persona Id",
+          "type": "string"
+        },
+        "models": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Models",
+          "type": "array"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        },
+        "env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Env",
+          "type": "object"
+        },
+        "turns": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Turns",
+          "type": "array"
+        },
+        "success_hints": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Success Hints",
+          "type": "array"
+        },
+        "resume_session_dir": {
+          "default": "",
+          "description": "Host path to an ended session directory (\u2026/%2Fworkspace/<session_id>/). Launches fork from that history; new Grok session id per run.",
+          "title": "Resume Session Dir",
+          "type": "string"
+        },
+        "resume_session_id": {
+          "default": "",
+          "description": "Optional parent Grok session id when resuming. Defaults to the basename of resume_session_dir when empty.",
+          "title": "Resume Session Id",
+          "type": "string"
+        },
+        "max_turns": {
+          "default": 50,
+          "description": "Grok --max-turns: agent tool/plan steps allowed per prompt (default 50).",
+          "minimum": 1,
+          "title": "Max Turns",
+          "type": "integer"
+        },
+        "yolo": {
+          "default": false,
+          "description": "When true, launch with ``grok --yolo`` (aggressive auto-approve). Default false uses ``--always-approve`` only.",
+          "title": "Yolo",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "task_id",
+        "prompt"
+      ],
+      "title": "TaskDefinition",
+      "type": "object"
+    }
+  },
+  "description": "Root document for a tasks YAML file.",
+  "properties": {
+    "schema_version": {
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "defaults": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/TaskDefaults"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "tasks": {
+      "items": {
+        "$ref": "#/$defs/TaskDefinition"
+      },
+      "title": "Tasks",
+      "type": "array"
+    }
+  },
+  "title": "groket-tasks",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://indynull.github.io/groket/schemas/tasks.schema.json"
+}

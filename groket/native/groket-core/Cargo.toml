@@ -1,0 +1,12 @@
+[package]
+name = "groket-core"
+version = "0.1.0"
+edition = "2021"
+description = "Grok updates.jsonl scan leaf for groket"
+license = "MIT"
+publish = false
+
+[lib]
+name = "groket_core"
+path = "src/lib.rs"
+crate-type = ["rlib", "cdylib"]

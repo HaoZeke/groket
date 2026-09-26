@@ -1,0 +1,32 @@
+{
+  "sessionId": "sess-wire",
+  "total": 1,
+  "turns": [
+    {
+      "assistantCount": 1,
+      "assistantEventIndex": 1,
+      "assistantSummary": "hello agent",
+      "durationSeconds": 2.0,
+      "errorEventCount": 0,
+      "eventCount": 3,
+      "eventIndexes": [
+        0,
+        1,
+        2
+      ],
+      "firstIndex": 0,
+      "label": "turn 0 (open)",
+      "lastIndex": 2,
+      "open": true,
+      "outcome": "",
+      "promptIndex": 2,
+      "summary": "hello user",
+      "toolCallCount": 1,
+      "toolErrorCount": 0,
+      "turnIndex": 0,
+      "turnNumber": null,
+      "userCount": 1,
+      "userEventIndex": 0
+    }
+  ]
+}

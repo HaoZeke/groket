@@ -1,0 +1,2 @@
+{"type": "user", "content": [{"type": "text", "text": "<user_query>Do the thing</user_query>"}]}
+{"type": "assistant", "content": [{"type": "text", "text": "Done."}]}

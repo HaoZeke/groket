@@ -1,0 +1,4 @@
+{"type": "user", "content": [{"type": "text", "text": "<user_query>First turn</user_query>"}]}
+{"type": "assistant", "content": [{"type": "text", "text": "Turn 1 done."}]}
+{"type": "user", "content": [{"type": "text", "text": "<user_query>Second turn</user_query>"}]}
+{"type": "assistant", "content": [{"type": "text", "text": "Turn 2 done."}]}

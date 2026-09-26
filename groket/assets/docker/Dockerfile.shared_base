@@ -1,0 +1,18 @@
+FROM {base_image}
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+{profile_comment}
+{tool_block}
+# Install Grok Build CLI (needs --fork-session / --session-id for eval fork-resume).
+# Bump the label when fork flags regress so the shared-base content hash rebuilds.
+RUN curl -fsSL https://x.ai/cli/install.sh | bash \
+ && grok --help 2>&1 | grep -qE -- '--fork-session' \
+ || (echo "Grok CLI install lacks --fork-session; install.sh returned an old binary" >&2; exit 1)
+# groket-cli-capability: fork-session-2026-07
+
+ENV PATH="/root/.cargo/bin:/usr/local/go/bin:/root/.grok/bin:${{PATH}}"
+
+RUN mkdir -p /root/.grok /workspace
+
+WORKDIR /workspace

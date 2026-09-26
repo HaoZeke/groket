@@ -1,0 +1,124 @@
+name: CI
+
+on:
+  push:
+    branches: ["*"]
+    tags: ["*"]
+  pull_request:
+
+# One in-flight CI per branch / PR; a new push cancels the previous run.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_INCREMENTAL: "0"
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Python: lint, schema drift, examples contract (Linux only).
+  # ---------------------------------------------------------------------------
+  lint-python:
+    name: Lint Python
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv python install 3.13
+      - run: uv sync --group test --group dev
+      - name: Ruff + mypy + policy scripts
+        run: make lint
+      - name: Tasks / rules JSON Schema drift
+        run: make schema-check
+      - name: Examples contract
+        run: make examples-check
+
+  # ---------------------------------------------------------------------------
+  # Python: unit suite (Linux only).
+  # ---------------------------------------------------------------------------
+  test:
+    name: Test Python
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv python install 3.13
+      - run: uv sync --group test --group dev
+      - run: make test
+
+  # ---------------------------------------------------------------------------
+  # groket-hud (iced): full gate on Linux; clippy/test/release build on
+  # macOS and Windows so tray / window paths compile there too.
+  # ---------------------------------------------------------------------------
+  hud:
+    name: HUD (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux
+            os: ubuntu-latest
+            full: true
+          - name: macos
+            os: macos-latest
+            full: false
+          - name: windows
+            os: windows-latest
+            full: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: ${{ matrix.full && 'rustfmt, clippy, llvm-tools-preview' || 'rustfmt, clippy' }}
+
+      - name: Cargo cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: groket-hud
+          key: hud-${{ matrix.name }}
+
+      # Full Linux gate: theme map (needs Python) + fmt/clippy/test + llvm-cov.
+      - name: Python for HUD theme map
+        if: matrix.full
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install Python 3.13
+        if: matrix.full
+        run: uv python install 3.13
+      - name: Sync Python deps
+        if: matrix.full
+        run: uv sync --group test --group dev
+      - name: cargo-llvm-cov
+        if: matrix.full
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+      - name: Linux iced system libraries
+        if: matrix.full
+        run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev pkg-config
+      - name: make hud-check
+        if: matrix.full
+        run: make hud-check
+
+      # macOS / Windows: compile and test the crate (no theme generator / cov).
+      - name: rustfmt
+        if: ${{ !matrix.full }}
+        run: cargo fmt --check --manifest-path groket-hud/Cargo.toml
+      - name: clippy
+        if: ${{ !matrix.full }}
+        run: cargo clippy --manifest-path groket-hud/Cargo.toml --all-targets -- -D warnings
+      - name: cargo test
+        if: ${{ !matrix.full }}
+        run: cargo test --manifest-path groket-hud/Cargo.toml
+      - name: release build
+        if: ${{ !matrix.full }}
+        run: cargo build --release --manifest-path groket-hud/Cargo.toml

@@ -1,0 +1,7 @@
+{
+  "persona_id": "superpowers",
+  "name": "superpowers",
+  "description": "Marketplace superpowers plugin enabled (TDD, debugging, planning skills).",
+  "github_write": false,
+  "plugins": ["superpowers"]
+}

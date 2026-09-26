@@ -1,0 +1,28 @@
+{
+  "matched": 1,
+  "sessions": [
+    {
+      "contextTokensUsed": null,
+      "contextUsageCompact": "",
+      "contextWindowTokens": null,
+      "contextWindowUsagePct": null,
+      "createdAt": "",
+      "durationSeconds": 0.0,
+      "errorCount": 0,
+      "label": "View session",
+      "model": "unknown",
+      "numEvents": 0,
+      "origin": "work",
+      "outcome": "running",
+      "path": "/workspace/sess-wire",
+      "sessionId": "sess-wire",
+      "sortEpoch": 1786248643.1593769,
+      "status": "running",
+      "taskId": "",
+      "title": "View session",
+      "toolCallCount": 0,
+      "updatedAt": ""
+    }
+  ],
+  "total": 1
+}

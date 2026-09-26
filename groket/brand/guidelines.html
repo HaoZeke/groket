@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>groket — identity guidelines 1.0</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Fira+Sans:wght@400;500;700;800&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --ink: #282828;
+    --cream: #FBF1C7;
+    --green: #98971A;
+    --red: #CC241D;
+    --yellow: #D79921;
+    --gray: #928374;
+    --line: rgba(40,40,40,.12);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--cream); color: var(--ink);
+    font-family: "Fira Sans", system-ui, sans-serif; font-weight: 400;
+    font-size: 16px; line-height: 1.5; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 64px 32px 120px; }
+  h1 { font-weight: 800; font-size: 56px; letter-spacing: -0.04em; line-height: 1; margin: 0 0 12px; }
+  h2 { font-weight: 800; font-size: 28px; letter-spacing: -0.03em; margin: 72px 0 16px; }
+  h3 { font-weight: 600; font-size: 15px; letter-spacing: 0.08em; text-transform: uppercase; margin: 32px 0 12px; }
+  p { max-width: 68ch; }
+  .lede { font-size: 20px; font-weight: 500; max-width: 52ch; }
+  .meta { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12px; opacity: .7; }
+  .rule { border: 0; border-top: 1px solid var(--line); margin: 48px 0; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  @media (max-width: 800px) { .grid2, .grid3, .grid4 { grid-template-columns: 1fr; } }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 24px; }
+  .card.dark { background: var(--ink); color: #fff; }
+  .card img, .card svg { display: block; width: 100%; height: auto; }
+  .swatch { border-radius: 10px; overflow: hidden; border: 1px solid var(--line); }
+  .swatch .chip { height: 88px; }
+  .swatch .info { padding: 12px 14px; background: #fff; font-size: 13px; }
+  .swatch code { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; opacity: .65; font-weight: 600; }
+  code, .mono { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 13px; }
+  .specimen { font-weight: 800; letter-spacing: -0.04em; line-height: 1; }
+  footer { margin-top: 80px; font-size: 13px; opacity: .65; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<p class="meta">groket identity · version 1.2 · August 2026 · three-bar rocket</p>
+<h1>groket</h1>
+<p class="lede">A needle rocket whose body is three turns. The nose shoots from the complete cap. The short bar is running. The other long bar is failed. Needles and fins stay ink. Colour lives on the caps.</p>
+
+<hr class="rule"/>
+
+<h2>1. Primary lockups</h2>
+<p>Horizontal lockup for README and site headers. Stacked lockup when the mark sits above the name.</p>
+<div class="grid2">
+  <div class="card" style="grid-column:1/-1"><img src="png/groket-lockup-horizontal.png" alt="Horizontal lockup"/><p class="meta">Horizontal · <span class="mono">png/groket-lockup-horizontal.png</span></p></div>
+  <div class="card"><img src="png/groket-lockup-stacked.png" alt="Stacked lockup"/><p class="meta">Stacked · <span class="mono">png/groket-lockup-stacked.png</span></p></div>
+  <div class="card"><img src="png/groket-wordmark.png" alt="Wordmark"/><p class="meta">Wordmark · <span class="mono">svg/groket-wordmark.svg</span></p></div>
+</div>
+
+<h2>2. Mark</h2>
+<p>Three bars, three caps. The middle bar carries the nose, so that cap is complete (green). Top is failed (red). The short bar is running (yellow). The approved still is <span class="mono">source/approved.jpg</span>. Ship the SVG from <span class="mono">build.py</span>.</p>
+<div class="grid3">
+  <div class="card"><img src="png/groket-mark.png" alt="Colour mark"/><p class="meta">Colour</p></div>
+  <div class="card"><img src="png/groket-mark-mono.png" alt="Mono mark"/><p class="meta">Mono · all ink</p></div>
+  <div class="card dark"><img src="png/groket-mark-reverse.png" alt="Reverse mark"/><p class="meta">Reverse · cream body, colour caps</p></div>
+</div>
+
+<h2>3. Small mark (terminal grid)</h2>
+<p>The small mark is the rocket with needles and fins removed. It is drawn on a
+<strong>7×3 character grid</strong> so a terminal, a CLI, and a browser tab
+show the same picture. One cell is one <span class="mono">█</span>. Long bars
+are six cells plus a cap; the running bar is four plus a cap.</p>
+<pre class="mono" style="background:#fff;border:1px solid var(--line);padding:16px;border-radius:8px;line-height:1.15;font-size:18px">██████<span style="color:#CC241D">█</span>
+██████<span style="color:#98971A">█</span>
+████<span style="color:#D79921">█</span></pre>
+<p>Same file as <span class="mono">small.txt</span> / <span class="mono">svg/groket-small.svg</span>.
+Do not add gaps between rows. Do not use a rocket emoji or a trigram.</p>
+<h3>One-line caps</h3>
+<p>When only one row exists (prompt, tight chrome), use the three caps with a
+one-cell gap. That is <span class="mono">caps.txt</span>:</p>
+<pre class="mono" style="background:#fff;border:1px solid var(--line);padding:12px 16px;border-radius:8px;font-size:18px"><span style="color:#98971A">█</span> <span style="color:#CC241D">█</span> <span style="color:#D79921">█</span></pre>
+<h3>TUI chrome</h3>
+<p>The TUI header draws the 7×3 small mark at full size (three rows). Do not
+pack it with half-blocks, and do not ship a second SVG for chrome.</p>
+<div class="grid3">
+  <div class="card"><img src="png/groket-small.png" alt="Small mark"/><p class="meta">Small · 7×3 grid</p></div>
+  <div class="card"><img src="png/groket-caps.png" alt="Caps row"/><p class="meta">Caps · one row</p></div>
+  <div class="card"><img src="png/groket-favicon-64.png" alt="Favicon" style="width:64px"/><p class="meta">Tab icon · small mark in a square</p></div>
+</div>
+
+<h2>3b. App icon</h2>
+<div class="grid3">
+  <div class="card"><img src="png/groket-app-icon-512.png" alt="Light app icon"/><p class="meta">Light dock / HUD · 1024 / 512 / 256</p></div>
+  <div class="card dark"><img src="png/groket-app-icon-dark-1024.png" alt="Dark app icon"/><p class="meta">Dark dock</p></div>
+</div>
+
+<h2>4. Colour</h2>
+<p>Ink and cream for the rocket. Caps use the three turn statuses. Gruvbox hex, screen sRGB.</p>
+<div class="grid4">
+  <div class="swatch"><div class="chip" style="background:#282828"></div><div class="info"><strong>Ink</strong><br/><code>#282828</code><br/>needles, fins, bars</div></div>
+  <div class="swatch"><div class="chip" style="background:#FBF1C7;border-bottom:1px solid var(--line)"></div><div class="info"><strong>Cream</strong><br/><code>#FBF1C7</code><br/>paper, reverse body</div></div>
+  <div class="swatch"><div class="chip" style="background:#98971A"></div><div class="info"><strong>Complete</strong><br/><code>#98971A</code><br/>middle cap (nose)</div></div>
+  <div class="swatch"><div class="chip" style="background:#CC241D"></div><div class="info"><strong>Failed</strong><br/><code>#CC241D</code><br/>top cap</div></div>
+</div>
+<div class="grid4" style="margin-top:12px">
+  <div class="swatch"><div class="chip" style="background:#D79921"></div><div class="info"><strong>Running</strong><br/><code>#D79921</code><br/>bottom cap</div></div>
+  <div class="swatch"><div class="chip" style="background:#928374"></div><div class="info"><strong>Cancelled</strong><br/><code>#928374</code><br/>optional fourth status, not in the mark</div></div>
+  <div class="swatch"><div class="chip" style="background:#FFFFFF;border-bottom:1px solid var(--line)"></div><div class="info"><strong>Paper white</strong><br/><code>#FFFFFF</code><br/>mono knockout</div></div>
+  <div class="swatch"><div class="chip" style="background:#282828"></div><div class="info"><strong>HUD canvas</strong><br/>Ink, not true black</div></div>
+</div>
+<p>Caps stay on the bars. Needles and fins stay Ink (or Cream on a reverse field).</p>
+
+<h2>5. Type</h2>
+<p>The word <em>groket</em> is <strong>Fira Sans ExtraBold</strong> 800, tracking <span class="mono">−0.04 em</span>, lowercase. That is the same family the HUD uses for chrome (Regular / Bold). Files live in <span class="mono">fonts/</span> (SIL OFL 1.1, Mozilla and Telefónica).</p>
+<table>
+  <tr><th>Role</th><th>Face</th><th>Weight</th><th>Tracking</th><th>Case</th></tr>
+  <tr><td>Wordmark</td><td>Fira Sans</td><td>800 ExtraBold</td><td>−0.04 em</td><td>lowercase</td></tr>
+  <tr><td>HUD UI</td><td>Fira Sans</td><td>400 / 700</td><td>0</td><td>sentence</td></tr>
+  <tr><td>Code, hex labels</td><td>JetBrains Mono</td><td>400 / 500</td><td>0</td><td>as written</td></tr>
+</table>
+<p class="specimen" style="font-size:72px;margin:24px 0 8px;font-family:'Fira Sans',sans-serif">groket</p>
+
+<h2>6. Clear space and minimum size</h2>
+<p>Clear space on every side equals one cap square. Digital minima (CSS pixels, mark height):</p>
+<table>
+  <tr><th>Asset</th><th>Minimum</th><th>Preferred</th></tr>
+  <tr><td>Colour mark</td><td>28 px</td><td>40 px+</td></tr>
+  <tr><td>Mono / reverse</td><td>24 px</td><td>32 px+</td></tr>
+  <tr><td>Horizontal lockup</td><td>28 px tall</td><td>40 px+</td></tr>
+  <tr><td>Stacked lockup</td><td>56 px tall</td><td>80 px+</td></tr>
+  <tr><td>App icon</td><td>32 px</td><td>64 px+</td></tr>
+  <tr><td>Small mark / TUI</td><td>3 cells tall</td><td>3×7 cells</td></tr>
+  <tr><td>Caps row</td><td>1 cell</td><td>1×5 cells</td></tr>
+  <tr><td>Favicon (square)</td><td>16 px</td><td>32 px</td></tr>
+</table>
+<p>HUD search-bar chrome uses the full mark at 32 px tall. The TUI uses the
+small mark or the two-line compression, never a raster of the rocket.</p>
+
+<h2>7. Which file, which job</h2>
+<table>
+  <tr><th>Job</th><th>File</th></tr>
+  <tr><td>README, site header</td><td><span class="mono">png/groket-lockup-horizontal.png</span></td></tr>
+  <tr><td>Poster, sticker</td><td><span class="mono">png/groket-lockup-stacked.png</span></td></tr>
+  <tr><td>macOS / Linux dock (installer)</td><td><span class="mono">png/groket-app-icon-1024.png</span></td></tr>
+  <tr><td>Dark dock</td><td><span class="mono">png/groket-app-icon-dark-1024.png</span></td></tr>
+  <tr><td>HUD window / Alt-Tab / tray / notify</td><td><span class="mono">png/groket-tray-64.png</span> (cream plate + ink rim + three-bar small mark; dual contrast)</td></tr>
+  <tr><td>HUD search bar, light</td><td><span class="mono">png/groket-mark.png</span> (32px tall)</td></tr>
+  <tr><td>HUD search bar, dark</td><td><span class="mono">png/groket-mark-reverse.png</span></td></tr>
+  <tr><td>Browser tab</td><td><span class="mono">png/groket-favicon-32.png</span></td></tr>
+  <tr><td>TUI / CLI (3 rows)</td><td><span class="mono">small.txt</span> / <span class="mono">svg/groket-small.svg</span></td></tr>
+  <tr><td>One-line CLI / tight chrome</td><td><span class="mono">caps.txt</span></td></tr>
+  <tr><td>One-colour print</td><td><span class="mono">png/groket-mark-mono.png</span></td></tr>
+</table>
+
+<h2>8. Files</h2>
+<p class="mono" style="white-space:pre;background:#fff;border:1px solid var(--line);padding:16px;border-radius:8px;line-height:1.45">brand/
+  source/approved.jpg      ← agreed still
+  guidelines.html          ← this book
+  README.md
+  build.py                 ← SVG mark, wordmark, rasters
+  fonts/                   ← Fira Sans ExtraBold + OFL
+  svg/                     ← geometric mark + small + lockup wrappers
+  png/                     ← usable rasters
+  small.txt                ← 7×3 Unicode small mark
+  caps.txt                 ← one-line caps
+</p>
+<p>Wordmark font: <span class="mono">fonts/FiraSans-ExtraBold.ttf</span>. Rebuild: <span class="mono">make brand</span> or <span class="mono">uv run --group brand python brand/build.py</span>. Needs the <span class="mono">brand</span> uv group and <span class="mono">rsvg-convert</span>.</p>
+
+<footer>
+  groket 1.1 · three-bar rocket · Fira Sans © Mozilla and Telefónica, SIL OFL 1.1
+</footer>
+</div>
+</body>
+</html>

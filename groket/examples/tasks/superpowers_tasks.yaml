@@ -1,0 +1,187 @@
+# yaml-language-server: $schema=https://indynull.github.io/groket/schemas/tasks.schema.json
+#
+# Exercise the Grok Build **superpowers** marketplace plugin (skills: TDD,
+# systematic debugging, brainstorming/planning, verification-before-completion).
+#
+# 1. Install persona (once):
+#      mkdir -p ~/.groket/personas
+#      cp examples/personas/superpowers.json ~/.groket/personas/
+#      # ensure index lists it — or open Personas in the TUI and save once
+# 2. Host must have marketplace plugin ``superpowers`` available to the eval
+#    image (persona plugins install from catalog at launch).
+# 3. Validate / run:
+#      uv run groket batch validate examples/tasks/superpowers_tasks.yaml
+#      uv run groket batch run -t examples/tasks/superpowers_tasks.yaml -m <model-id>
+#      uv run groket batch run -t examples/tasks/superpowers_tasks.yaml -i sp-tdd-fizzbuzz
+#
+# Success signals (manual / trace review): agent loads superpowers skills
+# (skill file reads / skill tool), follows TDD or debugging discipline, and
+# leaves tests that fail then pass where applicable.
+
+schema_version: 1
+
+defaults:
+  docker_image: fully-loaded
+  persona_id: superpowers
+  category: superpowers
+  domain: agent-skills
+  horizon: medium
+
+tasks:
+  # --- using-superpowers / TDD ------------------------------------------------
+  - task_id: sp-tdd-fizzbuzz
+    description: >
+      Classic TDD: implement FizzBuzz with tests first under superpowers
+      (test-driven-development skill).
+    tags: [superpowers, tdd]
+    success_hints:
+      - tests written before implementation
+      - failing test observed then green
+      - fizzbuzz module with tests in workspace
+    prompt: |
+      You have an empty /workspace (Python available).
+
+      Implement a small FizzBuzz library **using test-driven development**
+      as required by the superpowers plugin (invoke the TDD skill before coding):
+
+      - Function `fizzbuzz(n: int) -> str` in `fizzbuzz.py`
+        - multiples of 3 → "Fizz", of 5 → "Buzz", of both → "FizzBuzz", else str(n)
+      - Tests in `test_fizzbuzz.py` (stdlib `unittest` is fine)
+
+      Requirements:
+      1. Use superpowers skills (especially test-driven-development / using-superpowers).
+      2. Write a failing test first; run it and show failure; then implement; run tests green.
+      3. Do not implement production code before the first failing test run.
+      4. Finish with `python -m unittest test_fizzbuzz.py -v` passing.
+
+  # --- systematic-debugging ---------------------------------------------------
+  - task_id: sp-debug-broken-counter
+    description: >
+      Planted bug in a counter module; agent should use systematic-debugging,
+      not random edits.
+    tags: [superpowers, debugging]
+    success_hints:
+      - root cause identified (off-by-one / wrong reset)
+      - test fails then passes after fix
+      - no drive-by refactors
+    initial_commands: |
+      cat > /workspace/counter.py << 'PY'
+      """Broken counter — fix via systematic debugging + tests."""
+
+      class Counter:
+          def __init__(self) -> None:
+              self._n = 0
+
+          def increment(self) -> int:
+              # BUG: increments by 2
+              self._n += 2
+              return self._n
+
+          def reset(self) -> None:
+              # BUG: sets to 1 instead of 0
+              self._n = 1
+
+          @property
+          def value(self) -> int:
+              return self._n
+      PY
+      cat > /workspace/test_counter.py << 'PY'
+      import unittest
+      from counter import Counter
+
+      class TestCounter(unittest.TestCase):
+          def test_starts_at_zero(self):
+              self.assertEqual(Counter().value, 0)
+
+          def test_increment_by_one(self):
+              c = Counter()
+              self.assertEqual(c.increment(), 1)
+              self.assertEqual(c.increment(), 2)
+
+          def test_reset(self):
+              c = Counter()
+              c.increment()
+              c.reset()
+              self.assertEqual(c.value, 0)
+
+      if __name__ == "__main__":
+          unittest.main()
+      PY
+      python -m unittest test_counter.py -v || true
+    prompt: |
+      /workspace has `counter.py` and `test_counter.py`. Tests currently fail.
+
+      Using the superpowers **systematic-debugging** skill (and TDD if you add
+      tests), fix `counter.py` so all tests pass. Do not rewrite the public API.
+      Prefer hypothesis → minimal fix → verify with `python -m unittest test_counter.py -v`.
+
+      Explicitly follow the debugging skill steps (reproduce, isolate, fix, verify).
+
+  # --- brainstorming + writing-plans (design before code) ---------------------
+  - task_id: sp-plan-todo-cli
+    description: >
+      Multi-turn: plan with superpowers brainstorming/writing-plans, then implement
+      a tiny CLI on a later turn.
+    tags: [superpowers, planning, multi-turn]
+    success_hints:
+      - design/plan written before implementation
+      - todo CLI with add/list works
+    prompt: |
+      You will design a **minimal** command-line todo tool for /workspace.
+
+      **This turn — planning only (no production implementation yet):**
+      Use superpowers **brainstorming** and/or **writing-plans** skills.
+      Produce `PLAN.md` with:
+      - goals and non-goals
+      - file layout
+      - CLI interface (`todo add …`, `todo list`)
+      - how you will test it
+
+      Stop after writing `PLAN.md`. Do not implement the CLI yet.
+    turns:
+      - |
+        Implement the plan in PLAN.md using superpowers **test-driven-development**.
+        Deliver a working `todo` script or module, tests, and show tests passing.
+        Prefer following PLAN.md rather than inventing a larger scope.
+
+  # --- verification-before-completion -----------------------------------------
+  - task_id: sp-verify-before-done
+    description: >
+      Small feature where the agent must run verification steps before claiming done
+      (verification-before-completion skill).
+    tags: [superpowers, verification]
+    success_hints:
+      - verification commands run in the trace
+      - claim of completion only after checks pass
+    initial_commands: |
+      mkdir -p /workspace/src
+      printf '%s\n' 'def greet(name: str) -> str:' '    return f"hi {name}"' > /workspace/src/greet.py
+      printf '%s\n' 'from greet import greet' 'assert greet("a") == "hi a"' > /workspace/src/smoke_test.py
+    prompt: |
+      In /workspace/src, extend `greet.py` so `greet(name)` returns `"Hello, {name}!"`
+      (capital H, comma, space, exclamation). Update any tests/smoke checks.
+
+      Use superpowers **verification-before-completion**: do not claim the task is
+      finished until you have run verification commands and they succeed
+      (e.g. `cd /workspace/src && python smoke_test.py` and/or unittest).
+
+      Show the verification output in your work before the final summary.
+
+  # --- multi-skill pressure (skills + multi-turn) -----------------------------
+  - task_id: sp-skill-discipline-multi
+    description: >
+      Short multi-turn that pressures skill invocation: debug then verify.
+    tags: [superpowers, multi-turn]
+    initial_commands: |
+      cat > /workspace/mathutil.py << 'PY'
+      def add(a, b):
+          return a - b  # wrong on purpose
+      PY
+    prompt: |
+      /workspace/mathutil.py has a wrong `add` function.
+      Use superpowers **systematic-debugging** (not a blind one-line guess if you
+      can show a failing test first). Fix `add` to return a+b and leave a small test.
+    turns:
+      - |
+        Use **verification-before-completion**: re-run tests / a one-liner check and
+        only then confirm the fix. If anything fails, fix again.

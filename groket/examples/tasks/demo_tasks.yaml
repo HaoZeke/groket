@@ -1,0 +1,55 @@
+# yaml-language-server: $schema=https://indynull.github.io/groket/schemas/tasks.schema.json
+# Local schema: schemas/tasks.schema.json (make schema)
+#
+#   groket batch validate examples/tasks/demo_tasks.yaml
+#   groket batch run -t examples/tasks/demo_tasks.yaml -m <model-id>
+#   groket batch run -t examples/tasks/demo_tasks.yaml -i demo-list-workspace
+
+schema_version: 1
+
+defaults:
+  docker_image: fully-loaded
+  category: regular
+
+tasks:
+  - task_id: demo-list-workspace
+    description: Empty workspace smoke check (no git clone).
+    prompt: >
+      List the top-level files in /workspace and print the current date.
+      Do not modify any files.
+    # initial_commands: |
+    #   echo "workspace ready"
+
+  - task_id: demo-readme-summary
+    description: Summarize README if present.
+    prompt: >
+      If a README exists in the workspace, summarize it in three bullets.
+      If not, say so and stop.
+
+  - task_id: demo-follow-up-turns
+    description: Multi-turn scripted follow-ups (second user message after first turn).
+    prompt: >
+      Create a file named hello.txt in /workspace containing the word hello.
+    turns:
+      - Print the contents of hello.txt and confirm it exists.
+
+  # Live host directory as /workspace (no git clone, no CoW into checkouts/).
+  # Agent edits land in that path. Single model only.
+  # - task_id: demo-local-path
+  #   description: Work in an existing checkout on the host.
+  #   repo_path: ~/src/my-project
+  #   # yolo: true   # optional: grok --yolo instead of --always-approve
+  #   prompt: >
+  #     List top-level files and summarize the README if present.
+
+  # Fork an *ended* on-disk session (same path as TUI `f`):
+  # resume_session_dir: /path/to/runs/traces/<container>/%2Fworkspace/<session_id>
+  # prompt: is the first message on the new branch (grok --resume --fork-session).
+  # turns: optional further scripted user messages after that first forked turn.
+  # - task_id: demo-fork-resume
+  #   description: Continue an ended session as a new forked Grok session id.
+  #   resume_session_dir: /home/you/.groket/work/runs/traces/groket-…/%2Fworkspace/019f…
+  #   prompt: >
+  #     Continue from where you left off: implement the next phase.
+  #   turns:
+  #     - Summarize what you just changed.

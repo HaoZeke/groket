@@ -1,0 +1,64 @@
+# Curated MCP servers for GTE persona picker (starter set, NOT the full MCP registry).
+# Picker also lists any [mcp_servers.NAME] from your host ~/.grok/config.toml.
+# Prefer remote HTTP/SSE — works on minimal + fully-loaded without npx in-image.
+# Extend: add entries here, or work_dir/capabilities/mcp_catalog.yaml, or host config.
+
+servers:
+  - id: github
+    title: GitHub (remote MCP)
+    description: Issues, PRs, repos via GitHub remote MCP (needs GITHUB_TOKEN or GH_TOKEN).
+    transport: http
+    url: "https://api.githubcopilot.com/mcp/"
+    needs_env: [GITHUB_TOKEN]
+    tags: [git, github, pr, issues]
+    profiles: [minimal, fully-loaded]
+
+  - id: context7
+    title: Context7 docs
+    description: Library/docs lookup over remote MCP.
+    transport: http
+    url: "https://mcp.context7.com/mcp"
+    needs_env: []
+    tags: [docs, libraries]
+    profiles: [minimal, fully-loaded]
+
+  # Remote gateways (need their own API/auth — set persona env_vars / headers in mcp_extra_toml if required)
+  - id: slack
+    title: Slack (Waystation remote MCP)
+    description: >
+      Channels/messages via waystation.ai Slack MCP. Auth is provider-specific
+      (OAuth/token on their side); set whatever env/headers they require in persona env or mcp_extra_toml.
+    transport: http
+    url: "https://waystation.ai/slack/mcp"
+    needs_env: []
+    tags: [slack, chat, messaging]
+    profiles: [minimal, fully-loaded]
+
+  - id: slack-smithery
+    title: Slack (Smithery remote MCP)
+    description: >
+      Smithery-hosted Slack MCP. Typically needs Authorization Bearer token (SMITHERY_API_KEY or similar)
+      — add via persona env_vars and/or mcp_extra_toml headers.
+    transport: http
+    url: "https://server.smithery.ai/@smithery-ai/slack/mcp"
+    needs_env: [SMITHERY_API_KEY]
+    tags: [slack, chat, smithery]
+    profiles: [minimal, fully-loaded]
+
+  - id: linear
+    title: Linear (remote MCP)
+    description: Linear issues/projects via Linear's MCP endpoint (often OAuth/API key; configure per Linear docs).
+    transport: http
+    url: "https://mcp.linear.app/mcp"
+    needs_env: []
+    tags: [linear, issues, project]
+    profiles: [minimal, fully-loaded]
+
+  - id: sentry
+    title: Sentry (remote MCP)
+    description: Sentry errors/issues MCP (auth via Sentry MCP setup; token/env as required).
+    transport: http
+    url: "https://mcp.sentry.dev/mcp"
+    needs_env: []
+    tags: [sentry, errors, observability]
+    profiles: [minimal, fully-loaded]

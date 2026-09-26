@@ -1,0 +1,4 @@
+{"timestamp": 1782347263, "method": "session/update", "params": {"sessionId": "snap-minimal-001", "update": {"sessionUpdate": "user_message_chunk", "content": {"type": "text", "text": "Do the thing"}}}}
+{"timestamp": 1782347270, "method": "session/update", "params": {"sessionId": "snap-minimal-001", "update": {"sessionUpdate": "tool_call", "toolCallId": "call-a", "title": "run_terminal_command", "rawInput": {"command": "echo hi"}}}}
+{"timestamp": 1782347275, "method": "session/update", "params": {"sessionId": "snap-minimal-001", "update": {"sessionUpdate": "tool_call_update", "toolCallId": "call-a", "status": "completed", "content": "hi"}}}
+{"timestamp": 1782347280, "method": "session/update", "params": {"sessionId": "snap-minimal-001", "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "Done."}}}}

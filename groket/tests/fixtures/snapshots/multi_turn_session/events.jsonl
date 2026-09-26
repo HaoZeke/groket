@@ -1,0 +1,4 @@
+{"ts": "2026-06-25T00:27:35.281Z", "type": "turn_started", "session_id": "snap-multiturn-001", "turn_number": 0, "model_id": "v9-dietcoke"}
+{"ts": "2026-06-25T00:27:50.342Z", "type": "turn_ended", "outcome": "success"}
+{"ts": "2026-06-25T00:28:00.000Z", "type": "turn_started", "session_id": "snap-multiturn-001", "turn_number": 1, "model_id": "v9-dietcoke"}
+{"ts": "2026-06-25T00:28:20.000Z", "type": "turn_ended", "outcome": "success"}

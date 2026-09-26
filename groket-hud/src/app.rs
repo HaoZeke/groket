@@ -539,37 +539,35 @@ impl Hud {
                 self.mark_down(&e);
                 Task::none()
             }
-            Message::ListLoaded { quiet, result } => {
-                match result {
-                    Ok(v) => {
-                        if quiet {
-                            if let Ok(page) = decode_session_list_response(&v) {
-                                if !page.unchanged
-                                    && !page.delta
-                                    && page.matched > page.sessions.len() as i64
-                                {
-                                    return fetch_list(quiet, 0);
-                                }
+            Message::ListLoaded { quiet, result } => match result {
+                Ok(v) => {
+                    if quiet {
+                        if let Ok(page) = decode_session_list_response(&v) {
+                            if !page.unchanged
+                                && !page.delta
+                                && page.matched > page.sessions.len() as i64
+                            {
+                                return fetch_list(quiet, 0);
                             }
-                            self.apply_list(v, quiet);
-                            return Task::none();
                         }
-                        self.apply_list(v.clone(), quiet);
-                        let more = self.continue_catalog_pages(&v);
-                        if self.sessions.is_empty() {
-                            more
-                        } else if self.overview.is_none() {
-                            Task::batch([more, self.load_overview(false)])
-                        } else {
-                            more
-                        }
+                        self.apply_list(v, quiet);
+                        return Task::none();
                     }
-                    Err(e) => {
-                        self.mark_down(&e);
-                        Task::none()
+                    self.apply_list(v.clone(), quiet);
+                    let more = self.continue_catalog_pages(&v);
+                    if self.sessions.is_empty() {
+                        more
+                    } else if self.overview.is_none() {
+                        Task::batch([more, self.load_overview(false)])
+                    } else {
+                        more
                     }
                 }
-            }
+                Err(e) => {
+                    self.mark_down(&e);
+                    Task::none()
+                }
+            },
             Message::ListPage { offset: _, result } => match result {
                 Ok(v) => {
                     let before = self.all_sessions.len();

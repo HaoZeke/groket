@@ -1,0 +1,1017 @@
+"""Wire-shaped session views for the control plane (HUD / web / editors).
+
+Pure domain loaders → JSON-RPC payloads. No Textual. Used by
+:class:`~groket.integrations.control.ControlServer` handlers.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import threading
+from concurrent.futures import Future
+from pathlib import Path
+
+from .. import event_types as et
+from ..models import JsonObject, JsonValue, SessionMeta, TraceEvent, as_json_object
+from ..notes import load_schema, notes_snapshot
+from ..parser import (
+    TimelineStamp,
+    load_session_meta,
+    parse_timeline,
+    session_timeline_stamp,
+)
+from ..session.sources import classify_session_origin, work_traces_root
+from ..session.tagged_blocks import unwrap_for_display
+from ..session.turns import (
+    TurnSegment,
+    event_display_turn_map,
+    harness_user_chrome_heading,
+    is_operator_user_event,
+    operator_prompt_text,
+    segment_timeline_turns,
+    turn_index_for_event,
+)
+from ..session.usage_stats import SessionUsageStats, collect_session_usage
+from ..tool_display import (
+    display_tool_output,
+    image_result_path,
+    preserve_primary_raw_input,
+    tool_input_fields,
+)
+from .catalog import session_catalog_row
+
+DEFAULT_FINDINGS_LIMIT = 80
+
+# Concurrent HUD open + live poll + notifies were double-building the same
+# multi‑MB session overview (~12–30s each). Join one flight per path and cache
+# by timeline/notes/findings inputs so warm re-polls stay cheap.
+_OverviewStamp = tuple[TimelineStamp, str, tuple[tuple[str, int, int], ...]]
+_overview_cache: dict[str, tuple[_OverviewStamp, JsonObject]] = {}
+_overview_inflight: dict[str, Future[JsonObject]] = {}
+_overview_inflight_lock = threading.Lock()
+
+# Warm paged session/timeline must not re-segment multi‑k event lists.
+# Keyed by session path; invalidated when session_timeline_stamp changes.
+_TurnViewCache = tuple[TimelineStamp, list[TurnSegment], dict[int, int]]
+_turn_view_cache: dict[str, _TurnViewCache] = {}
+_turn_view_lock = threading.Lock()
+
+# Tool families aligned with ``ui.styles.tool_family`` (domain copy — no UI import).
+_TOOL_FAMILY_READ = frozenset(
+    {
+        "read_file",
+        "grep",
+        "list_dir",
+        "web_search",
+        "read_resource",
+        "list_resources",
+    }
+)
+_TOOL_FAMILY_WRITE = frozenset(
+    {
+        "search_replace",
+        "write_file",
+        "create_file",
+        "todo_write",
+        "update_goal",
+        "image_gen",
+        "image_edit",
+        "image_to_video",
+        "reference_to_video",
+    }
+)
+_TOOL_FAMILY_SHELL = frozenset(
+    {
+        "run_terminal_command",
+        "get_command_or_subagent_output",
+        "kill_command_or_subagent",
+        "wait_commands_or_subagents",
+        "monitor",
+        "scheduler_create",
+        "scheduler_delete",
+        "scheduler_list",
+    }
+)
+_TOOL_FAMILY_AGENT = frozenset(
+    {
+        "spawn_subagent",
+        "ask_user_question",
+        "enter_plan_mode",
+        "exit_plan_mode",
+        "use_tool",
+        "search_tool",
+        "call_mcp",
+        "search_mcp",
+    }
+)
+
+
+def tool_family(name: str) -> str:
+    """Map a tool name to read | write | shell | agent | mcp | other."""
+    n = (name or "").strip()
+    if "__" in n or n.startswith("mcp_"):
+        return "mcp"
+    if n in _TOOL_FAMILY_READ:
+        return "read"
+    if n in _TOOL_FAMILY_WRITE:
+        return "write"
+    if n in _TOOL_FAMILY_SHELL:
+        return "shell"
+    if n in _TOOL_FAMILY_AGENT:
+        return "agent"
+    low = n.lower()
+    if any(k in low for k in ("read", "get", "list", "search", "grep", "find")):
+        return "read"
+    if any(k in low for k in ("write", "edit", "create", "update", "delete", "save")):
+        return "write"
+    if any(k in low for k in ("run", "shell", "exec", "kill", "wait")):
+        return "shell"
+    return "other"
+
+
+logger = logging.getLogger(__name__)
+
+DEFAULT_TIMELINE_LIMIT = 300
+MAX_TIMELINE_LIMIT = 2000
+DEFAULT_CONTENT_CHARS = 4000
+MAX_CONTENT_CHARS = 50_000
+
+
+def session_meta_mapping(
+    meta: SessionMeta,
+    *,
+    path: Path | None = None,
+    origin: str | None = None,
+) -> JsonObject:
+    """Serialize :class:`SessionMeta` for ``session/get`` / enriched list rows."""
+    try:
+        path_str = str((path or meta.session_dir).resolve())
+    except OSError:
+        path_str = str(path or meta.session_dir)
+    origin_key = (origin or meta.origin or "work").strip() or "work"
+    return {
+        "sessionId": (meta.session_id or meta.session_dir.name).strip(),
+        "path": path_str,
+        "title": meta.title or "",
+        "summary": meta.summary_text or "",
+        "label": meta.label,
+        "model": meta.model_display,
+        "modelId": meta.model_id or "",
+        "reasoningEffort": meta.reasoning_effort or "",
+        "status": meta.list_status_label(),
+        "outcome": meta.turn_outcome or "",
+        "origin": origin_key,
+        "createdAt": meta.created_at or "",
+        "updatedAt": meta.updated_at or "",
+        "numMessages": int(meta.num_messages or 0),
+        "numEvents": int(meta.num_events or 0),
+        "durationSeconds": float(meta.duration_seconds or 0),
+        "duration": meta.duration_str,
+        "toolCallCount": int(meta.tool_call_count or 0),
+        "toolFailureCount": int(meta.tool_failure_count or 0),
+        "errorCount": int(meta.error_count or 0),
+        "doomLoopWarnings": int(meta.doom_loop_warnings or 0),
+        "linesAdded": int(meta.lines_added or 0),
+        "linesRemoved": int(meta.lines_removed or 0),
+        "contextWindowUsagePct": meta.context_window_usage_pct,
+        "contextTokensUsed": meta.context_tokens_used,
+        "contextWindowTokens": meta.context_window_tokens,
+        "contextUsage": meta.context_usage_str,
+        "contextUsageCompact": meta.context_usage_compact,
+        "compactionCount": int(meta.compaction_count or 0),
+        "gitRepo": meta.git_repo or "",
+        "gitBranch": meta.git_branch or "",
+        "gitCommit": meta.git_commit or "",
+        "taskId": meta.task_id or "",
+        "runId": meta.run_id or "",
+        "loopCount": int(meta.loop_count or 0),
+        "turnInProgress": bool(meta.turn_in_progress),
+        "turnFailed": bool(meta.turn_failed),
+    }
+
+
+def timeline_event_mapping(
+    event: TraceEvent,
+    *,
+    content_chars: int = DEFAULT_CONTENT_CHARS,
+    turn_index: int | None = None,
+) -> JsonObject:
+    """Serialize one timeline event for ``session/timeline`` / overview.
+
+    Includes ``kind`` / ``toolFamily`` so palette clients can color and unpack
+    the same way as the TUI without re-implementing taxonomy. Optional
+    *turn_index* is the sequential operator turn id (0-based) for this event.
+    """
+    cap = max(0, min(int(content_chars), MAX_CONTENT_CHARS))
+    content_raw = event.content if isinstance(event.content, str) else str(event.content or "")
+    # Strip outer harness tags for display (keep raw length for truncation meta).
+    content = unwrap_for_display(content_raw)
+    tname = (event.tool_name or "").strip()
+    content = display_tool_output(content, tool_name=tname)
+    truncated = len(content) > cap
+    body = content[:cap] if cap else ""
+    raw: JsonValue = {}
+    try:
+        bag = event.raw_input
+        if isinstance(bag, dict):
+            raw = as_json_object(bag)
+        elif hasattr(bag, "raw"):
+            inner = bag.raw()
+            if isinstance(inner, dict):
+                raw = as_json_object(inner)
+    except Exception:
+        raw = {}
+    raw = _capped_raw_input(raw, cap)
+    kind = et.event_kind(event.event_type)
+    family = tool_family(tname) if kind in ("tool", "tool_result") or tname else ""
+    chrome_heading = (
+        harness_user_chrome_heading(content_raw)
+        if kind == "user" or event.event_type in et.USER_TYPES
+        else None
+    )
+    # Harness injects system-reminder / background-task bodies as user_message_chunk;
+    # re-label so TUI/HUD do not present them as operator "User" rows.
+    if chrome_heading is not None:
+        kind = "system"
+    # Prefer structured tool headline when available.
+    if kind == "tool" and tname:
+        heading = tname if not family else f"{tname}"
+    elif kind == "tool_result" and tname:
+        heading = f"{tname} result"
+    elif chrome_heading is not None:
+        heading = chrome_heading
+    elif kind == "user":
+        heading = "User"
+    elif kind == "agent":
+        heading = "Assistant"
+    elif kind == "thought":
+        heading = "Thought"
+    elif kind == "error":
+        heading = "Error"
+    elif kind == "system":
+        heading = "System"
+    else:
+        heading = event.type_label
+    type_label = chrome_heading.lower() if chrome_heading else event.type_label
+    preview = body.split("\n", 1)[0][:200] if body else event.summary_line
+    raw_map = as_json_object(raw) if isinstance(raw, dict) else {}
+    fields = tool_input_fields(tname, raw_map, max_chars=cap) if raw_map else []
+    tool_fields: list[JsonValue] = list(fields)
+    img_path = image_result_path(content_raw, None) if tname in ("image_gen", "image_edit") else ""
+    if not img_path and tname in ("image_gen", "image_edit"):
+        img_path = image_result_path(body)
+    return {
+        "index": int(event.index),
+        "type": event.event_type or "",
+        "typeLabel": type_label,
+        "kind": kind,
+        "toolFamily": family,
+        "heading": heading,
+        "harnessChrome": chrome_heading is not None,
+        "timestamp": event.timestamp,
+        "time": event.time_str,
+        "content": body,
+        "contentTruncated": truncated,
+        "contentLength": len(content),
+        "toolName": tname,
+        "toolCallId": event.tool_call_id or "",
+        "isError": bool(event.is_error),
+        "updateIndex": int(event.update_index or 0),
+        "promptIndex": event.prompt_index,
+        "turnIndex": int(turn_index) if turn_index is not None else None,
+        "preview": preview,
+        "rawInput": raw,
+        "toolFields": tool_fields,
+        "imagePath": img_path,
+    }
+
+
+def _capped_raw_input(raw: JsonValue, max_chars: int) -> JsonValue:
+    """Bound ``rawInput``; keep command / old-new / path / pattern / query."""
+    if not raw or max_chars <= 0:
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    return preserve_primary_raw_input(as_json_object(raw), max_chars)
+
+
+def _turn_user_prompt_preview(
+    seg: TurnSegment,
+    *,
+    max_chars: int = 320,
+) -> tuple[str, int | None]:
+    """First *operator* user message text in *seg* and its timeline index.
+
+    Used by HUD / editors as the turn card summary (what the user asked).
+    Prefer nested ``<user_query>`` body; skip harness chrome tags.
+    """
+    for event in seg.events:
+        if not is_operator_user_event(event):
+            continue
+        text = operator_prompt_text(event.content or "", max_chars=max_chars)
+        if not text:
+            continue
+        return text, int(event.index)
+    return "", None
+
+
+def _turn_assistant_preview(
+    seg: TurnSegment,
+    *,
+    max_chars: int = 12_000,
+) -> tuple[str, int | None]:
+    """Last non-empty assistant message in *seg* (the turn wrap-up)."""
+    last_text = ""
+    last_idx: int | None = None
+    for event in seg.events:
+        if event.event_type not in et.AGENT_TYPES:
+            continue
+        raw = unwrap_for_display(event.content or "").strip()
+        if not raw:
+            continue
+        last_text = raw
+        last_idx = int(event.index)
+    if not last_text:
+        return "", None
+    if len(last_text) > max_chars:
+        last_text = last_text[: max_chars - 1] + "…"
+    return last_text, last_idx
+
+
+def turn_segment_mapping(
+    seg: TurnSegment,
+    *,
+    include_event_indexes: bool = True,
+    assistant_max_chars: int = 12_000,
+) -> JsonObject:
+    """Serialize one turn segment for ``session/turns`` / overview turns.
+
+    :param assistant_max_chars: Cap on assistant wrap-up text. Overview uses a
+        short cap so large sessions stay small; full ``session/turns`` keeps
+        the default.
+    """
+    summary, user_index = _turn_user_prompt_preview(seg)
+    assistant, assistant_index = _turn_assistant_preview(seg, max_chars=assistant_max_chars)
+    row: JsonObject = {
+        "turnIndex": int(seg.turn_index),
+        "turnNumber": seg.turn_number,
+        "promptIndex": seg.prompt_index,
+        "outcome": seg.outcome or "",
+        "open": bool(seg.open),
+        "label": seg.label,
+        "summary": summary,
+        "userEventIndex": user_index,
+        "assistantSummary": assistant,
+        "assistantEventIndex": assistant_index,
+        "eventCount": int(seg.event_count),
+        "toolCallCount": int(seg.tool_call_count),
+        "toolErrorCount": int(seg.tool_error_count),
+        "userCount": int(seg.user_count),
+        "assistantCount": int(seg.assistant_count),
+        "errorEventCount": int(seg.error_event_count),
+        "firstIndex": seg.first_index,
+        "lastIndex": seg.last_index,
+        "durationSeconds": seg.duration_seconds(),
+    }
+    if include_event_indexes:
+        row["eventIndexes"] = [int(e.index) for e in seg.events]
+    return row
+
+
+def usage_stats_mapping(usage: SessionUsageStats) -> JsonObject:
+    """Compact usage summary for ``session/usage``."""
+    host: list[JsonValue] = [
+        {
+            "name": t.name,
+            "calls": int(t.calls),
+            "errors": int(t.errors),
+            "category": t.category,
+        }
+        for t in (usage.host_tools or usage.tools or [])[:40]
+    ]
+    mcp: list[JsonValue] = [
+        {
+            "serverId": s.server_id,
+            "useToolCalls": int(s.use_tool_calls),
+            "errors": int(s.errors),
+            "configured": bool(s.configured),
+        }
+        for s in (usage.mcp_servers or [])[:40]
+    ]
+    skills: list[JsonValue] = [
+        {
+            "skillId": s.skill_id,
+            "skillMdReads": int(s.skill_md_reads),
+            "nameInTranscript": bool(s.name_in_transcript),
+            "engaged": bool(s.engaged),
+            "configured": bool(s.configured),
+        }
+        for s in (usage.skills or [])[:40]
+    ]
+    tools_invoked: list[JsonValue] = [
+        str(x) for x in (getattr(usage, "mcp_tools_invoked", None) or [])[:40]
+    ]
+    return {
+        "hostTools": host,
+        "mcpServers": mcp,
+        "skills": skills,
+        "mcpBridgeCalls": int(getattr(usage, "mcp_bridge_calls", 0) or 0),
+        "mcpToolsInvoked": tools_invoked,
+    }
+
+
+def _session_origin(session_dir: Path, work_dir: Path | None) -> str:
+    from .sources import is_under_host_grok_sessions
+
+    sd = Path(session_dir)
+    if work_dir is not None:
+        return classify_session_origin(sd, work_traces=work_traces_root(work_dir))
+    if is_under_host_grok_sessions(sd):
+        return "host"
+    return "work"
+
+
+def build_session_get(
+    session_dir: Path,
+    *,
+    work_dir: Path | None = None,
+    include_notes_revision: bool = True,
+    include_timeline_count: bool = False,
+) -> JsonObject:
+    """Full ``session/get`` payload for *session_dir*.
+
+    *include_timeline_count* defaults False so HUD-style clients stay fast
+    (avoid a full ``parse_timeline`` just for the events column).
+    """
+    sd = Path(session_dir)
+    origin = _session_origin(sd, work_dir)
+    meta = load_session_meta(sd, include_timeline_count=include_timeline_count)
+    meta.origin = origin
+    out = session_meta_mapping(meta, path=sd, origin=origin)
+    cat = session_catalog_row(sd, origin=origin)
+    if cat is not None:
+        out["catalog"] = cat
+    if include_notes_revision:
+        try:
+            snap = notes_snapshot(sd)
+            out["notesRevision"] = snap.revision
+            out["notesCount"] = len(snap.doc.notes)
+        except Exception:
+            logger.debug("notes snapshot for session/get %s", sd, exc_info=True)
+            out["notesRevision"] = ""
+            out["notesCount"] = 0
+    return out
+
+
+def _finding_turn_indices(
+    segs: list[TurnSegment],
+    event_indices: list[int],
+) -> list[int]:
+    """Map finding event indices → sequential operator turn indices (unique, order preserved)."""
+    out: list[int] = []
+    seen: set[int] = set()
+    for ei in event_indices:
+        ti = turn_index_for_event(segs, int(ei))
+        if ti is None or ti in seen:
+            continue
+        seen.add(ti)
+        out.append(ti)
+    return out
+
+
+def finding_mapping(
+    finding: object,
+    *,
+    segs: list[TurnSegment],
+    plugin_id: str = "",
+) -> JsonObject:
+    """Serialize one analysis :class:`~groket.analysis.base.Finding` for palette clients."""
+    # duck-typed to avoid hard import cycles in type checkers; runtime uses Finding.
+    fid = str(getattr(finding, "id", "") or "")
+    plug = str(getattr(finding, "plugin_id", "") or plugin_id or "")
+    sev = getattr(finding, "severity", None)
+    if sev is not None and hasattr(sev, "value"):
+        sev_s = str(getattr(sev, "value", "low") or "low")
+    else:
+        sev_s = str(sev or "low")
+    title = str(getattr(finding, "title", "") or "")
+    detail = str(getattr(finding, "detail", "") or "")
+    if len(detail) > 2000:
+        detail = detail[:1997] + "…"
+    category = str(getattr(finding, "category", "") or "")
+    raw_ev = getattr(finding, "event_indices", None) or []
+    event_indices = [int(x) for x in raw_ev if isinstance(x, (int, float, str))]
+    raw_up = getattr(finding, "update_indices", None) or []
+    update_indices = [int(x) for x in raw_up if isinstance(x, (int, float, str))]
+    turn_indices = _finding_turn_indices(segs, event_indices)
+    primary_event = event_indices[0] if event_indices else None
+    primary_turn = turn_indices[0] if turn_indices else None
+    extras_raw = getattr(finding, "extras", None) or {}
+    extras: JsonObject = {}
+    if isinstance(extras_raw, dict):
+        # Keep a short set of MF-style keys for Issue-box paste in HUD.
+        for key in (
+            "what_model_did",
+            "what_should_have_happened",
+            "where",
+            "why",
+            "pattern",
+        ):
+            if key in extras_raw and extras_raw[key] not in (None, ""):
+                val = str(extras_raw[key])
+                extras[key] = val[:1200] + ("…" if len(val) > 1200 else "")
+    return {
+        "id": fid,
+        "pluginId": plug,
+        "severity": sev_s,
+        "title": title,
+        "detail": detail,
+        "category": category,
+        "eventIndices": list(event_indices[:40]),
+        "updateIndices": list(update_indices[:40]),
+        "turnIndices": list(turn_indices),
+        "primaryEventIndex": primary_event,
+        "primaryTurnIndex": primary_turn,
+        "extras": extras,
+    }
+
+
+def build_session_findings(
+    session_dir: Path,
+    *,
+    segs: list[TurnSegment] | None = None,
+    limit: int = DEFAULT_FINDINGS_LIMIT,
+) -> JsonObject:
+    """Load cached analysis findings and attach turn/event references.
+
+    Reads ``~/.groket/cache/analysis/<session_id>/*.json`` (same layout as the
+    TUI analysis cache). Does not re-run analyzers. Stale/mismatched plugin
+    versions are still served so palette clients can show last known findings.
+    """
+    from ..analysis.base import AnalysisResult, Finding
+    from ..paths import analysis_cache_dir
+
+    sd = Path(session_dir)
+    sid = (sd.name or "").strip()
+    cap = max(0, min(int(limit), 200))
+    if segs is None:
+        segs = segment_timeline_turns(parse_timeline(sd))
+
+    cache_dir = analysis_cache_dir() / "analysis" / sid
+    collected: list[JsonObject] = []
+    plugins: list[str] = []
+    if cache_dir.is_dir():
+        # Stable order: plugin file name, then finding order within the file.
+        for path in sorted(cache_dir.glob("*.json")):
+            try:
+                raw = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeError, json.JSONDecodeError):
+                logger.debug("skip findings cache %s", path, exc_info=True)
+                continue
+            if not isinstance(raw, dict):
+                continue
+            result_raw = raw.get("result")
+            if not isinstance(result_raw, dict):
+                if "findings" in raw or "analyzer_id" in raw:
+                    result_raw = raw
+                else:
+                    continue
+            try:
+                result = AnalysisResult.from_dict(as_json_object(result_raw))
+            except (TypeError, ValueError, KeyError):
+                logger.debug("skip findings parse %s", path, exc_info=True)
+                continue
+            plug = (result.analyzer_id or path.stem or "").strip()
+            if plug and plug not in plugins:
+                plugins.append(plug)
+            findings: list[Finding] = list(result.findings or [])
+            for f in findings:
+                collected.append(finding_mapping(f, segs=segs, plugin_id=plug))
+
+    rows: list[JsonValue] = list(collected[:cap])
+    plugins_out: list[JsonValue] = list(plugins)
+    return {
+        "sessionId": sid,
+        "total": len(collected),
+        "count": len(rows),
+        "truncated": len(collected) > len(rows),
+        "plugins": plugins_out,
+        "findings": rows,
+    }
+
+
+def _session_cache_key(session_dir: Path) -> str:
+    """Stable cache key for a session directory."""
+    sd = Path(session_dir)
+    try:
+        return str(sd.expanduser().resolve())
+    except OSError:
+        return str(sd.expanduser())
+
+
+def _findings_cache_stamp(session_dir: Path) -> tuple[tuple[str, int, int], ...]:
+    """Fingerprint analysis-cache JSON files (name, mtime_ns, size)."""
+    from ..paths import analysis_cache_dir
+
+    sid = (Path(session_dir).name or "").strip()
+    if not sid:
+        return ()
+    cache_dir = analysis_cache_dir() / "analysis" / sid
+    if not cache_dir.is_dir():
+        return ()
+    out: list[tuple[str, int, int]] = []
+    try:
+        paths = sorted(cache_dir.glob("*.json"))
+    except OSError:
+        return ()
+    for path in paths:
+        try:
+            st = path.stat()
+        except OSError:
+            continue
+        out.append((path.name, int(st.st_mtime_ns), int(st.st_size)))
+    return tuple(out)
+
+
+def _overview_input_stamp(session_dir: Path) -> _OverviewStamp:
+    """Inputs that must match for a cached overview to be reused."""
+    sd = Path(session_dir)
+    notes_rev = ""
+    try:
+        notes_rev = notes_snapshot(sd).revision
+    except Exception:
+        logger.debug("notes stamp for overview %s", sd, exc_info=True)
+    return (session_timeline_stamp(sd), notes_rev, _findings_cache_stamp(sd))
+
+
+def _build_session_overview_uncached(
+    session_dir: Path,
+    *,
+    work_dir: Path | None = None,
+) -> JsonObject:
+    """Build overview without single-flight / result cache."""
+    sd = Path(session_dir)
+    origin = _session_origin(sd, work_dir)
+    meta = load_session_meta(sd, include_timeline_count=False)
+    meta.origin = origin
+    events = parse_timeline(sd)
+    meta.num_events = len(events)
+    segs, _turn_map = _turn_view_for_session(sd, events)
+    notes_rev = ""
+    notes_count = 0
+    notes_rows: list[JsonValue] = []
+    try:
+        snap = notes_snapshot(sd)
+        notes_rev = snap.revision
+        notes_count = len(snap.doc.notes)
+        for note in snap.doc.sorted_notes()[:40]:
+            notes_rows.append(
+                {
+                    "id": note.id,
+                    "turnIndex": note.turn_index,
+                    "fields": dict(note.fields),
+                    "eventIndices": list(note.event_indices),
+                    "createdAt": note.created_at,
+                    "updatedAt": note.updated_at,
+                }
+            )
+    except Exception:
+        logger.debug("notes for session/overview %s", sd, exc_info=True)
+
+    findings_block = build_session_findings(sd, segs=segs)
+
+    summary = (meta.summary_text or "").strip()
+    if len(summary) > 1200:
+        summary = summary[:1197] + "…"
+
+    return {
+        "sessionId": (meta.session_id or sd.name).strip(),
+        "meta": session_meta_mapping(meta, path=sd, origin=origin),
+        "summary": summary,
+        "turns": {
+            "total": len(segs),
+            # Short assistant preview for the list: full wrap-up is for open cards
+            # / session/turns — 12k×N turns made overview multi‑100KB and slow.
+            "turns": [
+                turn_segment_mapping(
+                    s,
+                    include_event_indexes=False,
+                    assistant_max_chars=400,
+                )
+                for s in segs
+            ],
+        },
+        "timeline": {
+            "total": len(events),
+            "offset": 0,
+            "limit": 0,
+            "truncated": False,
+            "events": [],
+            "lazy": True,
+        },
+        "notes": {
+            "revision": notes_rev,
+            "count": notes_count,
+            "notes": notes_rows,
+            "schema": _notes_schema_mapping(),
+        },
+        "findings": findings_block,
+    }
+
+
+def _notes_schema_mapping() -> JsonObject:
+    """Operator notes schema for HUD/TUI forms (same shape as notes/list)."""
+    schema = load_schema()
+    return {
+        "id": schema.schema_id,
+        "fields": [
+            {
+                "id": field.id,
+                "label": field.label or field.id,
+                "choices": list(field.choices),
+                "pick": field.pick,
+            }
+            for field in schema.fields
+        ],
+    }
+
+
+def build_session_overview(
+    session_dir: Path,
+    *,
+    work_dir: Path | None = None,
+) -> JsonObject:
+    """Meta + turns + notes + findings for palette clients (timeline lazy).
+
+    Parses the timeline once for turn segmentation and ``numEvents``. Does
+    **not** embed event rows — clients call ``session/timeline`` with
+    offset/limit (and optional type filter) so large sessions stay cheap.
+
+    Concurrent callers for the same session **join one in-flight build** and
+    reuse a stamp-keyed result so dual open+live-poll does not thrash multi‑MB
+    host sessions.
+    """
+    sd = Path(session_dir)
+    cache_key = _session_cache_key(sd)
+
+    while True:
+        stamp = _overview_input_stamp(sd)
+        cached = _overview_cache.get(cache_key)
+        if cached is not None and cached[0] == stamp:
+            return cached[1]
+
+        owner = False
+        with _overview_inflight_lock:
+            fut = _overview_inflight.get(cache_key)
+            if fut is None:
+                fut = Future()
+                _overview_inflight[cache_key] = fut
+                owner = True
+
+        if not owner:
+            fut.result()
+            continue
+
+        try:
+            out = _build_session_overview_uncached(sd, work_dir=work_dir)
+            # Stamp after build so a growth mid-flight forces a recheck.
+            done_stamp = _overview_input_stamp(sd)
+            _overview_cache[cache_key] = (done_stamp, out)
+            if not fut.done():
+                fut.set_result(out)
+            return out
+        except Exception as exc:
+            if not fut.done():
+                fut.set_exception(exc)
+            raise
+        finally:
+            with _overview_inflight_lock:
+                if _overview_inflight.get(cache_key) is fut:
+                    del _overview_inflight[cache_key]
+
+
+def _session_path_key(session_dir: Path) -> str:
+    """Stable path key for turn-view and overview caches."""
+    return _session_cache_key(session_dir)
+
+
+def _turn_view_for_session(
+    session_dir: Path,
+    events: list[TraceEvent],
+) -> tuple[list[TurnSegment], dict[int, int]]:
+    """Return (segments, event_index→display_turn) for *events*, stamp-cached.
+
+    Full re-segmentation of multi‑thousand event lists is the thrash path for
+    paged ``session/timeline``; reuse until :func:`session_timeline_stamp` moves.
+    """
+    sd = Path(session_dir)
+    key = _session_path_key(sd)
+    stamp = session_timeline_stamp(sd)
+    with _turn_view_lock:
+        cached = _turn_view_cache.get(key)
+        if cached is not None and cached[0] == stamp:
+            return cached[1], cached[2]
+    segs = segment_timeline_turns(events)
+    turn_by_index = event_display_turn_map(segs)
+    with _turn_view_lock:
+        _turn_view_cache[key] = (stamp, segs, turn_by_index)
+    return segs, turn_by_index
+
+
+def _timeline_kind_matches(event: TraceEvent, kind: str) -> bool:
+    """HUD kind filter: all / tools / user / asst / sess / errors."""
+    mode = (kind or "").strip().casefold()
+    if not mode or mode == "all":
+        return True
+    mapped = et.event_kind(event.event_type)
+    if mode == "tools":
+        return mapped in {"tool", "tool_result"}
+    if mode == "user":
+        return mapped == "user"
+    if mode in {"asst", "assistant", "agent"}:
+        return mapped in {"agent", "thought"}
+    if mode in {"sess", "session"}:
+        return mapped in {"system", "session", "error"}
+    if mode in {"errors", "error"}:
+        return bool(event.is_error) or mapped == "error"
+    return True
+
+
+def _snippet_around(text: str, start: int, needle_len: int, radius: int = 40) -> str:
+    """One display line around *start* (character index in *text*)."""
+    lo = max(0, start - radius)
+    hi = min(len(text), start + max(needle_len, 1) + radius)
+    chunk = text[lo:hi].replace("\n", " ").replace("\r", " ")
+    if lo > 0:
+        chunk = f"…{chunk}"
+    if hi < len(text):
+        chunk = f"{chunk}…"
+    return chunk
+
+
+def timeline_query_hit(event: TraceEvent, query: str) -> tuple[str, str] | None:
+    """First field that contains *query*, plus a snippet that includes the needle."""
+    needle = (query or "").strip().casefold()
+    if not needle:
+        return None
+    body = event.content if isinstance(event.content, str) else str(event.content or "")
+    fields = (
+        ("type", event.event_type or ""),
+        ("type_label", event.type_label or ""),
+        ("tool", event.tool_name or ""),
+        ("heading", event.summary_line or ""),
+        ("preview", (body.split("\n", 1)[0] if body else "")[:200]),
+        ("content", body[:8_000]),
+    )
+    for field, text in fields:
+        pos = text.casefold().find(needle)
+        if pos >= 0:
+            return field, _snippet_around(text, pos, len(needle))
+    return None
+
+
+def _timeline_query_matches(event: TraceEvent, query: str) -> bool:
+    """Casefold substring on type, tool, heading, and body."""
+    needle = (query or "").strip()
+    if not needle:
+        return True
+    return timeline_query_hit(event, query) is not None
+
+
+def _event_indexes_for_prompt(
+    segments: list[TurnSegment],
+    prompt_index: int,
+) -> set[int]:
+    """Timeline indexes for the turn(s) whose operator ``promptIndex`` matches.
+
+    Only the operator user row carries ``_meta.promptIndex`` on the wire.
+    Tools and assistant rows in the same turn usually have no meta, so a
+    per-event equality filter would drop them. Membership is the segment.
+    """
+    indexes: set[int] = set()
+    for seg in segments:
+        if seg.prompt_index == prompt_index:
+            indexes.update(int(e.index) for e in seg.events)
+    return indexes
+
+
+def build_session_timeline(
+    session_dir: Path,
+    *,
+    offset: int = 0,
+    limit: int | None = None,
+    event_type: str = "",
+    kind: str = "",
+    query: str = "",
+    prompt_index: int | None = None,
+    around_index: int | None = None,
+    at_index: int | None = None,
+    content_chars: int = DEFAULT_CONTENT_CHARS,
+) -> JsonObject:
+    """Paged timeline for ``session/timeline``."""
+    sd = Path(session_dir)
+    events = parse_timeline(sd)
+    # Sequential operator turn ids for HUD/TUI orientation while scrolling.
+    _segs, turn_by_index = _turn_view_for_session(sd, events)
+    prompt_indexes: set[int] | None = None
+    if prompt_index is not None:
+        prompt_indexes = _event_indexes_for_prompt(_segs, int(prompt_index))
+    type_filter = (event_type or "").strip().casefold()
+    filtered: list[TraceEvent] = []
+    for ev in events:
+        if type_filter and type_filter not in (ev.event_type or "").casefold():
+            if type_filter not in (ev.type_label or "").casefold():
+                continue
+        if not _timeline_kind_matches(ev, kind):
+            continue
+        if not _timeline_query_matches(ev, query):
+            continue
+        if prompt_indexes is not None and int(ev.index) not in prompt_indexes:
+            continue
+        filtered.append(ev)
+    total = len(filtered)
+    off = max(0, int(offset))
+    lim = DEFAULT_TIMELINE_LIMIT if limit is None else max(0, min(int(limit), MAX_TIMELINE_LIMIT))
+    if at_index is not None:
+        target = int(at_index)
+        hit = next((i for i, ev in enumerate(filtered) if int(ev.index) == target), None)
+        if hit is None:
+            off = 0
+            lim = 0
+        else:
+            off = hit
+            lim = 1
+    elif around_index is not None:
+        target = int(around_index)
+        hit = next((i for i, ev in enumerate(filtered) if int(ev.index) >= target), None)
+        if hit is None and filtered:
+            hit = len(filtered) - 1
+        if hit is not None:
+            off = max(0, hit - 8)
+    page = filtered[off : off + lim] if lim else []
+    q = (query or "").strip()
+    events_out: list[JsonValue] = []
+    for ev in page:
+        row = timeline_event_mapping(
+            ev,
+            content_chars=content_chars,
+            turn_index=turn_by_index.get(int(ev.index)),
+        )
+        if q:
+            # Distinct name: earlier branches bind ``hit`` as a page index.
+            match = timeline_query_hit(ev, q)
+            if match is not None:
+                field, snippet = match
+                row["matchField"] = field
+                row["matchSnippet"] = snippet
+        events_out.append(row)
+    return {
+        "sessionId": sd.name,
+        "total": total,
+        "offset": off,
+        "limit": lim,
+        "events": events_out,
+    }
+
+
+def build_session_turns(session_dir: Path) -> JsonObject:
+    """Turn segments for ``session/turns``."""
+    sd = Path(session_dir)
+    events = parse_timeline(sd)
+    segs, _turn_map = _turn_view_for_session(sd, events)
+    return {
+        "sessionId": sd.name,
+        "total": len(segs),
+        "turns": [turn_segment_mapping(s) for s in segs],
+    }
+
+
+def build_session_usage(session_dir: Path) -> JsonObject:
+    """Usage summary for ``session/usage``."""
+    events = parse_timeline(Path(session_dir))
+    usage = collect_session_usage(Path(session_dir), events)
+    out = usage_stats_mapping(usage)
+    out["sessionId"] = Path(session_dir).name
+    return out
+
+
+__all__ = [
+    "DEFAULT_CONTENT_CHARS",
+    "DEFAULT_FINDINGS_LIMIT",
+    "DEFAULT_TIMELINE_LIMIT",
+    "MAX_CONTENT_CHARS",
+    "MAX_TIMELINE_LIMIT",
+    "build_session_findings",
+    "build_session_get",
+    "build_session_overview",
+    "build_session_timeline",
+    "build_session_turns",
+    "build_session_usage",
+    "timeline_query_hit",
+    "finding_mapping",
+    "session_meta_mapping",
+    "timeline_event_mapping",
+    "turn_segment_mapping",
+    "usage_stats_mapping",
+]

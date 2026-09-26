@@ -1,0 +1,8 @@
+{
+  "analysis": {
+    "plugins": [
+      "diff_reviewer:DiffReviewerAnalyzer",
+      "conversation_flow:ConversationFlowAnalyzer"
+    ]
+  }
+}

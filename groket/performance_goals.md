@@ -1,0 +1,134 @@
+# Groket performance goals
+
+Groket is a keyboard-first monitor for Grok Build sessions: a home list of
+sessions, live status, and inspection of **one** open session (timeline,
+overview, notes, findings). It should feel light to open and to leave
+running. Heavy work belongs on `groket serve` and on the one session the
+operator clicked.
+
+This file is the current diagnosis and the remaining cuts. Numbers below
+were measured on this laptop against the live `~/.groket` / `~/.grok`
+trees (2026-08-09), not a copy of those trees in continuous integration.
+
+## Target
+
+| Moment | Feel |
+|--------|------|
+| Launch with serve already warm | Window/list usable in a couple of seconds, keyboard live immediately |
+| Launch when serve is cold | List may fill late, but keys still work; no multi-minute freeze |
+| Quiet live poll | No full catalog rescan or full table rebuild |
+| Open one session | Only that session's overview/timeline is parsed |
+
+Host `~/.grok/sessions` stays on the home list when the `H` pref is on.
+
+## What `session/list` returns
+
+Each catalog row is a small JSON object: id, path, title, model, status,
+duration, context meter, tool/error counts, timestamps. Enough to paint
+the home table and the HUD list.
+
+`load_session_meta_list` reads `summary.json`, `signals.json`, and turn
+markers in `events.jsonl`. It does **not** parse `updates.jsonl` or send
+timeline events.
+
+Timeline is a second path: open one session → `session/overview` + paged
+`session/timeline`. Sibling sessions stay as those cheap rows.
+
+## Why launch is still slow
+
+The list payload is cheap. Launch pays for **discovery** and **process
+start**, not for shipping timelines.
+
+On this machine (`show_host_sessions` true):
+
+| Step | Time | Notes |
+|------|------|--------|
+| First `import` of `TraceEvalApp` | ~19 s | Later runs ~2–4 s once Python's cache is warm. Textual + `groket.ui`. |
+| Top-level `~/.grok/sessions` | 62 dirs | Almost no `events.jsonl` at the top level |
+| Cold `list_session_catalog` (host on) | **163 s, 696 sessions** | |
+| Same scan again | 23 s | |
+| `SessionCatalogCache.get()` hit | 0.001 s | |
+
+Top-level host names include encoded cwd paths (`%2Fvar%2Ffolders%2F…`,
+`workspace`, …). They are not tidy one-session folders.
+`find_sessions` / `collect_session_dirs` walk those trees until they see
+`summary.json` or `updates.jsonl`. That walk found **696** session dirs
+and dominated the 163 s. Comment in `parser.find_sessions` already
+calls descending into session workspaces the old dominant cost; here
+the walker still spends minutes on junk/nested trees *before* a dir
+qualifies as a session.
+
+Launch then stacks:
+
+1. Import Textual + groket UI (~2–19 s).
+2. Start or attach to `groket serve`.
+3. If serve's catalog cache is cold, the first `session/list` **waits on
+   that 20–160 s walk**.
+4. TUI drains all matched rows once and paints the table on the UI thread.
+5. `AnalysisService` starts in `on_mount` (UI thread).
+
+After serve is warm, a later `session/list` is a cache hit. Quit and
+reopen while serve stays up: catalog I/O should not be the delay — import
++ attach + first paint should. Kill serve every time: pay the walk again.
+
+## Already done
+
+- List rows do not call `parse_timeline` / do not read `updates.jsonl`.
+- Serve catalog cache: no forced full rebuild every 15 s; fingerprint is
+  root `stat` (not `iterdir` of every child).
+- Quiet TUI/HUD polls send `sinceRevision`; unchanged owner → no row
+  transfer, no table rebuild. Revision is owner-scoped (restart is a gap,
+  full snapshot).
+- First TUI attach paints one `session/list` page (`drain=False`) and
+  does not drain `matched` on that first paint. Quiet poll after a serve
+  restart still drains. HUD first fetch is one page; remaining rows
+  fill in the background.
+- Timeline inspect is paged (200 events, 12 k chars); TUI control timeout
+  is 45 s; timeout is a toast, not a worker crash.
+- Catalog I/O for the home list runs on `@work(thread=True)`, not the
+  Textual message pump. First table paint is the first page only.
+
+## Remaining goals
+
+1. **Session discovery.** Stop walking encoded-cwd / workspace junk under
+   `~/.grok/sessions`. A host session should be a shallow child (or a
+   known layout), not “any `summary.json` anywhere under the root.”
+   Measure: cold `list_session_catalog` with host on stays near “number
+   of real session dirs × cheap meta,” not minutes.
+2. **Cold serve must not block first paint.** Serve can warm the catalog
+   in the background; `session/list` should return the warm cache (or an
+   honest empty/partial page) instead of stalling the client on a 160 s
+   walk.
+3. **First table paint.** First attach no longer drains `matched` before
+   the home table is shown. Remaining work is virtualizing a large local
+   filter set, not a second drain on first paint.
+4. **Import / mount.** `TraceEvalApp` no longer imports `AnalysisService`
+   at module load. Plugin registration waits until Analyze / settings.
+   Remaining cost is Textual itself.
+5. **Keep serve up.** Document and default: TUI/HUD attach to a long-lived
+   `groket serve`; quitting the TUI does not stop the owner (already
+   true). Launch advice should not imply restarting serve each time.
+
+## How to measure
+
+Prefer “did we walk this tree / parse this file” over flaky wall-clock in
+CI. Synthetic catalogs of hundreds of **tiny** session dirs stay in
+`tests/session/test_catalog_perf.py` and friends.
+
+On a real laptop, time:
+
+```text
+import TraceEvalApp
+list_session_catalog(work, include_host=True)   # cold and second
+SessionCatalogCache.get()                       # force vs warm
+session/list  (warm owner vs just-started owner)
+```
+
+Do not copy `~/.grok/sessions` into CI.
+
+## Non-goals
+
+- Hiding host sessions or dropping the `H` pref.
+- Requiring emacs/vim to drain the full catalog or send `sinceRevision`.
+- Virtualizing every browser pane (Summary/Report).
+- Timing a multi-GB host tree in continuous integration.

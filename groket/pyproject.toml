@@ -1,0 +1,209 @@
+[project]
+name = "groket"
+version = "0.2.0"
+description = "Groket — Grok session trace evaluation TUI"
+readme = "README.md"
+requires-python = ">=3.13"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Ali-Akber Saifee", email = "ali@indydevs.org" },
+]
+maintainers = [
+    { name = "Ali-Akber Saifee", email = "ali@indydevs.org" },
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Quality Assurance",
+    "Typing :: Typed",
+]
+# Prefer capable libraries over bespoke minimalism (TUI + CLI DX is the product).
+dependencies = [
+    "click>=8.1",              # CLI foundation (Typer builds on Click)
+    "fluent.runtime>=0.4",     # localization (Project Fluent .ftl)
+    "jinja2>=3.1",
+    "orjson>=3.10",            # fast JSON for multi-MB updates.jsonl timelines
+    "pydantic>=2.0",           # serialized models (Flag, configs, …)
+    "python-on-whales>=0.70",  # Docker
+    "pyyaml>=6.0",
+    "rich>=15.0.0",            # terminal formatting (also used by Typer/Textual)
+    "shellingham>=1.5",        # shell detection for Typer completion
+    "textual>=8.2.7",          # TUI framework
+    "typer>=0.26.8",           # CLI (subcommands, --help, shell completion)
+    "watchdog>=6.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/indynull/groket"
+Source = "https://github.com/indynull/groket"
+Documentation = "https://indynull.github.io/groket/"
+
+[project.scripts]
+groket = "groket.cli:main"
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+]
+
+[build-system]
+requires = ["setuptools>=77.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["groket*"]
+
+[tool.setuptools.package-data]
+# UI/locale stay in-package; docker/config templates are repo ``assets/`` (and
+# optional ``groket/_embedded_assets`` mirror for installed wheels).
+groket = [
+    "ui/app.tcss",
+    "locale/**/*.ftl",
+    "locale/**/*.txt",
+    "locale/**/README*",
+    "integrations/emacs/*.el",
+    "integrations/vim/lua/**/*.lua",
+    "integrations/vim/plugin/**/*.lua",
+    "_embedded_assets/**/*",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+src = ["groket"]
+
+[tool.ruff.lint]
+select = [
+    "F",       # pyflakes
+    "E", "W",  # pycodestyle
+    "I",       # isort
+    "UP",      # pyupgrade
+    "T20",     # flake8-print
+]
+# Size/complexity (PLR0911–0915, PLR0904): not in default select — historical
+# debt. Report via ``make lint-complexity``; split when editing offenders.
+# Thresholds under [tool.ruff.lint.pylint] match AGENTS.md §4.6.
+ignore = [
+    "E501",  # line length — formatter / line-length setting
+    "UP042", # str Enum pattern used for Severity / FlagVerdict
+]
+
+
+[tool.ruff.lint.per-file-ignores]
+"groket/cli.py" = ["T20"]
+"groket/runs/batch.py" = ["T20"]
+# Container/script assets (not library modules); print + %-format intentional.
+"assets/**" = ["T20", "UP031", "E402"]
+"groket/_embedded_assets/**" = ["T20", "UP031", "E402"]
+"groket/docker/orchestrator.py" = ["E402"]
+"groket/engine/detectors/__init__.py" = ["E402"]
+"groket/runs/run_configs.py" = ["E402"]
+# Textual widgets often need late imports (E402); single-letter loop vars (E741).
+"groket/ui/**" = ["E402", "E741"]
+"tests/**" = ["E402", "T20"]
+"examples/**" = ["T20"]
+"scripts/**" = ["T20"]
+"plugins/**" = ["T20"]
+"brand/**" = ["T20"]
+
+[tool.ruff.lint.isort]
+required-imports = ["from __future__ import annotations"]
+
+[tool.ruff.lint.pylint]
+max-args = 5           # PLR0913
+max-returns = 5        # PLR0911
+max-branches = 12      # PLR0912
+max-statements = 50    # PLR0915
+max-public-methods = 20  # PLR0904
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+# Default capture (fd) hides domain/CLI logging and Textual noise; use -s only when debugging.
+# Never set --capture=no in addopts — it dumps logger/print output into the suite stream.
+addopts = "--tb=short -rfE"
+
+[tool.coverage.run]
+source = ["groket"]
+branch = false
+# Non-library asset mirrors (text templates for image build / rules YAML copies).
+# Product gate is 100% of importable library code.
+omit = [
+    "groket/_embedded_assets/*",
+    "groket/_embedded_assets/**",
+]
+
+[tool.coverage.report]
+fail_under = 100
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "if typing.TYPE_CHECKING:",
+    "\\.\\.\\.",
+    "raise NotImplementedError",
+]
+
+[dependency-groups]
+test = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    # Optional SVG snapshots for layout regressions (Textual official plugin).
+    "pytest-textual-snapshot>=1.0",
+]
+dev = [
+    "mypy>=1.14",
+    "types-PyYAML>=6.0",
+    "ruff>=0.9",
+    {include-group = "test"},
+]
+brand = [
+    "fonttools>=4.55",
+    "pillow>=11.0",
+]
+
+
+[tool.mypy]
+python_version = "3.13"
+files = ["groket"]
+mypy_path = "."
+warn_unused_ignores = true
+# Returning third-party Any is noisy (Pydantic/Textual). Explicit Any *in our
+# source* is banned by scripts/check_typing_policy.py.
+# disallow_any_explicit also false-positives on Pydantic BaseModel classes.
+warn_return_any = false
+check_untyped_defs = true
+no_implicit_optional = true
+show_error_codes = true
+pretty = true
+# Full-tree gate. Recursive JSON unions still need narrowing at call sites;
+# prefer :class:`~groket.models.ParamBag` / :func:`~groket.models.json_as_str`.
+# Suppress only the structural noise from ``JsonValue`` until those are migrated.
+
+[[tool.mypy.overrides]]
+module = [
+    "textual.*",
+    "fluent.*",
+    "python_on_whales.*",
+    "rich.*",
+]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "groket.ui.*"
+# Presentation layer: annotate incrementally.
+disallow_untyped_defs = false
+check_untyped_defs = false

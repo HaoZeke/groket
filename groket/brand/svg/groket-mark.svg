@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 380" role="img" aria-label="groket">
+  <title>groket</title>
+  <g id="groket-mark" fill="#282828">
+    <polygon points="12,193 318,179 318,207"/>
+    <polygon points="570,179 570,207 872,193"/>
+    <polygon points="268,64 392,64 428,117 304,117"/>
+    <polygon points="268,322 392,322 428,269 304,269"/>
+    <rect x="318" y="117" width="208" height="44"/>
+    <rect x="318" y="171" width="208" height="44"/>
+    <rect x="318" y="225" width="156" height="44"/>
+  </g>
+  <g id="groket-caps">
+    <rect x="526" y="117" width="44" height="44" fill="#CC241D"/>
+    <rect x="526" y="171" width="44" height="44" fill="#98971A"/>
+    <rect x="474" y="225" width="44" height="44" fill="#D79921"/>
+  </g>
+</svg>

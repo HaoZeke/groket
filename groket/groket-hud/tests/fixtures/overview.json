@@ -1,0 +1,107 @@
+{
+  "findings": {
+    "count": 0,
+    "findings": [],
+    "plugins": [],
+    "sessionId": "sess-wire",
+    "total": 0,
+    "truncated": false
+  },
+  "meta": {
+    "compactionCount": 0,
+    "contextTokensUsed": null,
+    "contextUsage": "",
+    "contextUsageCompact": "",
+    "contextWindowTokens": null,
+    "contextWindowUsagePct": null,
+    "createdAt": "",
+    "doomLoopWarnings": 0,
+    "duration": "<1s",
+    "durationSeconds": 0.0,
+    "errorCount": 0,
+    "gitBranch": "",
+    "gitCommit": "",
+    "gitRepo": "",
+    "label": "View session",
+    "linesAdded": 0,
+    "linesRemoved": 0,
+    "loopCount": 0,
+    "model": "unknown",
+    "modelId": "unknown",
+    "numEvents": 3,
+    "numMessages": 0,
+    "origin": "work",
+    "outcome": "running",
+    "path": "/workspace/sess-wire",
+    "reasoningEffort": "",
+    "runId": "",
+    "sessionId": "sess-wire",
+    "status": "running",
+    "summary": "",
+    "taskId": "",
+    "title": "View session",
+    "toolCallCount": 0,
+    "toolFailureCount": 0,
+    "turnFailed": false,
+    "turnInProgress": true,
+    "updatedAt": ""
+  },
+  "notes": {
+    "count": 0,
+    "notes": [],
+    "revision": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "schema": {
+      "fields": [
+        {
+          "choices": [],
+          "id": "summary",
+          "label": "summary",
+          "pick": "one-of"
+        },
+        {
+          "choices": [],
+          "id": "detail",
+          "label": "detail",
+          "pick": "one-of"
+        }
+      ],
+      "id": "default"
+    }
+  },
+  "sessionId": "sess-wire",
+  "summary": "",
+  "timeline": {
+    "events": [],
+    "lazy": true,
+    "limit": 0,
+    "offset": 0,
+    "total": 3,
+    "truncated": false
+  },
+  "turns": {
+    "total": 1,
+    "turns": [
+      {
+        "assistantCount": 1,
+        "assistantEventIndex": 1,
+        "assistantSummary": "hello agent",
+        "durationSeconds": 2.0,
+        "errorEventCount": 0,
+        "eventCount": 3,
+        "firstIndex": 0,
+        "label": "turn 0 (open)",
+        "lastIndex": 2,
+        "open": true,
+        "outcome": "",
+        "promptIndex": 2,
+        "summary": "hello user",
+        "toolCallCount": 1,
+        "toolErrorCount": 0,
+        "turnIndex": 0,
+        "turnNumber": null,
+        "userCount": 1,
+        "userEventIndex": 0
+      }
+    ]
+  }
+}

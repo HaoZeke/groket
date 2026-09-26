@@ -1,0 +1,70 @@
+[bold]Everywhere[/bold]
+  Tab             Next control
+  Shift+Tab       Previous control
+  Arrows          Move in a list
+  Enter           Open or activate
+  Esc             Back or close
+  ?               This panel
+  Ctrl+P          Command palette for this screen
+  F5              Refresh (also Ctrl+R)
+  j               Jobs and logs
+  q               Quit when no field is focused
+
+[bold]Sessions[/bold]
+  /               Search
+  r               New run
+  C               Recipes
+  P               Personas
+  d               Rules
+  a               Analyze the selection
+  s               Select (also Space)
+  S               Select all
+  R               Re-run the highlighted recipe as a new session
+  f               Fork an ended session into a new multi-turn
+  Ctrl+S          Save the row as a recipe
+  E               Export a session bundle
+  H               Show native Host sessions beside Eval
+  n               Follow-up while awaiting
+  e               Done while awaiting
+  x               Delete (press twice)
+
+[bold]Browser[/bold]
+  [ ]  1-5        Timeline, Summary, Diff, Findings, Report
+  v               Timeline filter
+  i               Jump to Findings
+  f               Flag this event
+  N               New note
+  O               Edit or delete note
+  n               Follow-up while awaiting
+  e               Done while awaiting
+  y               Copy the selection, the finding, or the pane
+  s               Open the share link when the session has one
+  E               Export a session bundle
+  x               Delete (press twice)
+
+[bold]Runner[/bold]
+  Ctrl+Enter      Launch
+  Ctrl+S          Save recipe
+  T               Export this form as task YAML
+  [ ]  1-3        Recipe, Runtime, Extras
+
+[bold]Recipes[/bold]
+  Enter           Open in the runner
+  l               Launch
+  s               Select
+  n               New
+  x               Delete
+  T               Export as task YAML
+
+[bold]Personas[/bold]
+  Enter           Edit
+  n               New
+  x               Delete
+  Ctrl+S          Save in the editor
+
+[bold]Pickers[/bold]
+  s               Select
+  Ctrl+S          Apply the selection
+  Esc             Cancel
+
+The footer lists primary keys. The palette lists the rest.

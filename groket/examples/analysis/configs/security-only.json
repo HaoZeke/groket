@@ -1,0 +1,7 @@
+{
+  "analysis": {
+    "plugins": [
+      "security_scanner:SecurityScannerAnalyzer"
+    ]
+  }
+}

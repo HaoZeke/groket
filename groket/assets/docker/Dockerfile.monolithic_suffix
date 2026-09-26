@@ -1,0 +1,11 @@
+
+# Optional multiline initial commands (copied as a script; executed in entrypoint)
+COPY setup.sh /groket-setup.sh
+RUN chmod +x /groket-setup.sh
+
+COPY groket-share-once.py /groket-share-once.py
+COPY groket_find_primary_session.py /groket_find_primary_session.py
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh /groket-share-once.py /groket_find_primary_session.py
+
+ENTRYPOINT ["/entrypoint.sh"]

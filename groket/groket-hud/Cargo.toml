@@ -1,0 +1,63 @@
+[package]
+name = "groket-hud"
+version = "0.1.0"
+edition = "2021"
+description = "Sol-style session palette for the groket control plane"
+authors = ["Ali-Akber Saifee"]
+
+[lib]
+name = "groket_hud"
+path = "src/lib.rs"
+
+[[bin]]
+name = "groket-hud"
+path = "src/main.rs"
+
+[dependencies]
+global-hotkey = "0.6"
+iced = { version = "0.14", default-features = true, features = [
+    "tokio",
+    "markdown",
+    "canvas",
+    "image",
+    "advanced",
+    "lazy",
+    "highlighter",
+    "svg",
+] }
+notify-rust = "4"
+icedtea = "0.4.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
+uuid = { version = "1", features = ["v4"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+ksni = { version = "0.3", default-features = false, features = ["async-io", "blocking"] }
+x11rb = "0.13"
+
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+tray-icon = { version = "0.21", default-features = false }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["NSData"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = [
+    "NSAccessibilityConstants",
+    "NSAccessibilityProtocols",
+    "NSApplication",
+    "NSEvent",
+    "NSImage",
+    "NSResponder",
+    "NSRunningApplication",
+    "NSScreen",
+    "NSView",
+    "NSWindow",
+] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 8
+strip = true
+panic = "abort"

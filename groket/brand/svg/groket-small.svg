@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 7 3" role="img" aria-label="groket">
+  <title>groket</title>
+  <g id="groket-small">
+    <rect x="0" y="0" width="6.0" height="1.0" fill="#282828"/>
+    <rect x="6.0" y="0" width="1.0" height="1.0" fill="#CC241D"/>
+    <rect x="0" y="1.0" width="6.0" height="1.0" fill="#282828"/>
+    <rect x="6.0" y="1.0" width="1.0" height="1.0" fill="#98971A"/>
+    <rect x="0" y="2.0" width="4.0" height="1.0" fill="#282828"/>
+    <rect x="4.0" y="2.0" width="1.0" height="1.0" fill="#D79921"/>
+  </g>
+</svg>

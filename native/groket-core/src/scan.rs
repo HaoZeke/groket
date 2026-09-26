@@ -25,7 +25,7 @@ fn contains_bytes(hay: &[u8], needle: &[u8]) -> bool {
 }
 
 fn strip_trailing_cr(line: &[u8]) -> &[u8] {
-    line.strip_suffix(&[b'\r']).unwrap_or(line)
+    line.strip_suffix(b"\r").unwrap_or(line)
 }
 
 /// Return ``false`` when a ``tool_call_update`` line is non-terminal (skip JSON).
@@ -34,7 +34,8 @@ fn strip_trailing_cr(line: &[u8]) -> &[u8] {
 /// terminal status / error needle.
 #[must_use]
 pub fn keep_updates_line(line: &[u8]) -> bool {
-    if contains_bytes(line, TU_BYTES) && !TERM_BYTES.iter().copied().any(|m| contains_bytes(line, m))
+    if contains_bytes(line, TU_BYTES)
+        && !TERM_BYTES.iter().copied().any(|m| contains_bytes(line, m))
     {
         return false;
     }
@@ -87,6 +88,10 @@ unsafe fn slice_from_raw<'a>(ptr: *const u8, len: usize) -> Result<&'a [u8], i32
 }
 
 /// C ABI: ``1`` keep, ``0`` skip, ``-2`` when *ptr* is null and *len* is nonzero.
+///
+/// # Safety
+///
+/// *ptr* must be valid for *len* bytes, or null when *len* is 0.
 #[no_mangle]
 pub unsafe extern "C" fn groket_keep_updates_line(ptr: *const u8, len: usize) -> i32 {
     let line = match unsafe { slice_from_raw(ptr, len) } {
@@ -100,6 +105,12 @@ pub unsafe extern "C" fn groket_keep_updates_line(ptr: *const u8, len: usize) ->
 ///
 /// Returns ``0`` on success, ``-1`` if *out_cap* is too small (still sets
 /// ``*out_len`` to the required size), ``-2`` on null args.
+///
+/// # Safety
+///
+/// *in_ptr* must be valid for *in_len* bytes, or null when *in_len* is 0.
+/// *out_len* must be non-null. *out_ptr* must be valid for *out_cap* bytes,
+/// or null when *out_cap* is 0.
 #[no_mangle]
 pub unsafe extern "C" fn groket_filter_updates(
     in_ptr: *const u8,
@@ -173,7 +184,8 @@ mod tests {
 
     #[test]
     fn keep_user_message_chunk() {
-        let line = br#"{"params":{"update":{"sessionUpdate":"user_message_chunk","content":"hi"}}}"#;
+        let line =
+            br#"{"params":{"update":{"sessionUpdate":"user_message_chunk","content":"hi"}}}"#;
         assert!(keep_updates_line(line));
     }
 
@@ -274,13 +286,8 @@ mod tests {
                 RC_NULL
             );
             let mut empty_len = 99usize;
-            let rc = groket_filter_updates(
-                std::ptr::null(),
-                0,
-                std::ptr::null_mut(),
-                0,
-                &mut empty_len,
-            );
+            let rc =
+                groket_filter_updates(std::ptr::null(), 0, std::ptr::null_mut(), 0, &mut empty_len);
             assert_eq!(rc, RC_OK);
             assert_eq!(empty_len, 0);
         }

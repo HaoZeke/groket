@@ -1,0 +1,2 @@
+# No bundled composites (optional user YAML under ~/.groket/rules/).
+composites: []

@@ -1,0 +1,12 @@
+{
+  "run_id": "snapmin01",
+  "created_at": "2026-06-25T00:28:02.192520+00:00",
+  "prompt": "Do the thing",
+  "repo_url": "https://github.com/example/repo",
+  "repo_branch": "main",
+  "docker_image": "fully-loaded",
+  "models": [
+    "v9-dietcoke"
+  ],
+  "sessions": {}
+}

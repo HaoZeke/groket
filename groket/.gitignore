@@ -1,0 +1,38 @@
+
+.benchmarks/
+build/
+/config.json
+.coverage
+coverage.json
+dist/
+docs/_build/
+*.egg-info/
+*.elc
+/flags/
+htmlcov/
+/_meta_cache.json
+/models.yaml
+.mypy_cache/
+__pycache__/
+*.py[cod]
+*.so
+.pytest_cache/
+# Python
+# Repo-root runtime (traces, local overrides — not package sources)
+/reports/
+.ruff_cache/
+/runs/
+# Tooling caches / coverage (local only)
+traces/
+.venv/
+*.swp
+# iced HUD crate
+groket-hud/target/
+# updates.jsonl scan leaf
+native/groket-core/target/
+native/groket-core/Cargo.lock
+groket-hud/node_modules/
+groket-hud/dist/
+.superpowers/
+# Local scratch (HUD walk screenshots, ad-hoc probes — never commit)
+/tmp/

@@ -1,0 +1,8 @@
+{"timestamp": 1782347263, "method": "session/update", "params": {"sessionId": "snap-multiturn-001", "update": {"sessionUpdate": "user_message_chunk", "content": {"type": "text", "text": "First turn"}}}}
+{"timestamp": 1782347270, "method": "session/update", "params": {"sessionId": "snap-multiturn-001", "update": {"sessionUpdate": "tool_call", "toolCallId": "call-t1", "title": "read_file", "rawInput": {"target_file": "a.py"}}}}
+{"timestamp": 1782347275, "method": "session/update", "params": {"sessionId": "snap-multiturn-001", "update": {"sessionUpdate": "tool_call_update", "toolCallId": "call-t1", "status": "completed", "content": "ok"}}}
+{"timestamp": 1782347280, "method": "session/update", "params": {"sessionId": "snap-multiturn-001", "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "Turn 1 done."}}}}
+{"timestamp": 1782347290, "method": "session/update", "params": {"sessionId": "snap-multiturn-001", "update": {"sessionUpdate": "user_message_chunk", "content": {"type": "text", "text": "Second turn"}}}}
+{"timestamp": 1782347300, "method": "session/update", "params": {"sessionId": "snap-multiturn-001", "update": {"sessionUpdate": "tool_call", "toolCallId": "call-t2", "title": "run_terminal_command", "rawInput": {"command": "pytest"}}}}
+{"timestamp": 1782347310, "method": "session/update", "params": {"sessionId": "snap-multiturn-001", "update": {"sessionUpdate": "tool_call_update", "toolCallId": "call-t2", "status": "completed", "content": "passed"}}}
+{"timestamp": 1782347320, "method": "session/update", "params": {"sessionId": "snap-multiturn-001", "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "Turn 2 done."}}}}

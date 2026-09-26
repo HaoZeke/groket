@@ -1,0 +1,91 @@
+# Publish JSON Schema(s) to GitHub Pages (project site).
+# Repo Settings → Pages → Source: GitHub Actions.
+# URLs: …/schemas/tasks.schema.json , …/schemas/rules.schema.json
+
+name: Pages
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "schemas/**"
+      - "groket/runs/task_schema.py"
+      - "groket/engine/rule_schema.py"
+      - ".github/workflows/pages.yml"
+      - "Makefile"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only the latest Pages deploy for the branch matters.
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build schema site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv python install 3.13
+      - run: uv sync --group test --group dev
+      - name: Regenerate schemas from Pydantic
+        run: make schema
+      - name: Assemble site (schemas/ + index)
+        run: |
+          mkdir -p _site/schemas
+          cp schemas/tasks.schema.json _site/schemas/tasks.schema.json
+          cp schemas/rules.schema.json _site/schemas/rules.schema.json
+          cat > _site/index.html << 'HTML'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8" />
+            <title>groket schemas</title>
+            <style>
+              body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; }
+              code { background: #f4f4f5; padding: 0.1em 0.35em; border-radius: 4px; }
+            </style>
+          </head>
+          <body>
+            <h1>groket schemas</h1>
+            <p>JSON Schema artifacts for editor validation and tooling.</p>
+            <ul>
+              <li>
+                <a href="schemas/tasks.schema.json"><code>tasks.schema.json</code></a>
+                — batch / task list YAML
+                (<code>$id</code>:
+                <code>https://indynull.github.io/groket/schemas/tasks.schema.json</code>)
+              </li>
+              <li>
+                <a href="schemas/rules.schema.json"><code>rules.schema.json</code></a>
+                — detection rules / composites YAML
+                (<code>$id</code>:
+                <code>https://indynull.github.io/groket/schemas/rules.schema.json</code>)
+              </li>
+            </ul>
+            <p>Regenerate locally with <code>make schema</code>; CI fails on drift via <code>make schema-check</code>.</p>
+          </body>
+          </html>
+          HTML
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

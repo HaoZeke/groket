@@ -1,0 +1,3 @@
+{"ts": "2026-06-25T00:27:35.281Z", "type": "turn_started", "session_id": "snap-minimal-001", "turn_number": 0, "model_id": "v9-dietcoke"}
+{"ts": "2026-06-25T00:27:35.283Z", "type": "loop_started", "loop_index": 0}
+{"ts": "2026-06-25T00:27:50.342Z", "type": "turn_ended", "outcome": "success"}
